@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Database
+*.db
+
+# Test cache
+.pytest_cache/
+
+# Model artifacts
+models/*.pkl
+
+# IDE
+.vscode/
