@@ -4,18 +4,15 @@ from contextlib import asynccontextmanager
 import pandas as pd
 from fastapi import FastAPI
 
-from app.database.connection import Base, engine, SessionLocal
-from app.database import models
+from app.database.connection import SessionLocal
 from app.database.models import Rating
 
 from app.recommender.model import MovieRecommender
 
 from app.api.movies import router as movies_router
 from app.api.recommendations import router as recommendations_router
-
-
-# Initialize database tables
-Base.metadata.create_all(bind=engine)
+from app.api.watchlist import router as watchlist_router
+from app.api.analytics import router as analytics_router
 
 
 @asynccontextmanager
@@ -71,6 +68,8 @@ app = FastAPI(
 # Register API routers
 app.include_router(movies_router)
 app.include_router(recommendations_router)
+app.include_router(watchlist_router)
+app.include_router(analytics_router)
 
 
 @app.get("/")

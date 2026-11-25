@@ -61,9 +61,11 @@ class Watchlist(Base):
 
     movie_id = Column(Integer, ForeignKey("movies.movie_id"), nullable=False)
 
-    status = Column(String, default="planned")
+    status = Column(String, nullable=False, default="PLANNED", server_default="PLANNED")
 
     added_at = Column(DateTime, server_default=func.now())
+
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         UniqueConstraint(
