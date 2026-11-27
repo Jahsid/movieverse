@@ -8,16 +8,17 @@ MovieVerse has a working FastAPI backend and five-page Streamlit client. The liv
 
 ## Runtime and backend
 
-`app/main.py` constructs `FastAPI`, registers the movies, recommendations, watchlist and analytics routers, and supplies `/` and `/health`. Its lifespan opens a database session, reads all rating triples into pandas, trains `MovieRecommender` once, stores it on `app.state`, and closes the startup session. Startup fails if there are no ratings. There is no custom middleware or CORS configuration. `/health` returns a static healthy response and does not test live database or model availability.
+`app/main.py` constructs `FastAPI`, registers the movies, recommendations, watchlist and analytics routers, and supplies `/`, `/health`, and `/ready`. Its lifespan opens a database session, reads all rating triples into pandas, and trains `MovieRecommender` once when ratings exist. A database query failure or memory exhaustion stops startup; empty ratings or ordinary model initialization failure leave the model unavailable while catalogue routes can run. The startup session closes on success or failure, and application model state clears on shutdown. There is no custom middleware or CORS configuration. `/health` retains a static liveness response. `/ready` makes one `SELECT 1` database check and checks the trained model flag without retraining.
 
 | HTTP route | Input | Response contract | Implementation |
 |---|---|---|---|
 | `GET /` | None | Message object | `app/main.py` |
 | `GET /health` | None | Status and application object | `app/main.py` |
+| `GET /ready` | None | 200 if database and model available; otherwise 503, with `status`, `database`, `recommendation_model` | `app/main.py` |
 | `GET /api/v1/movies/` | `page>=1`, `page_size=1..100` | `MovieListResponse` | `movie_service.get_movies` |
 | `GET /api/v1/movies/search` | `q` nonempty, paging | `MovieListResponse` | `movie_service.search_movies` |
 | `GET /api/v1/movies/{movie_id}` | Integer path ID | `MovieResponse`; 404 missing | `movie_service.get_movie_by_id` |
-| `GET /api/v1/recommendations/similar/{movie_id}` | `k=1..20`, default 5 | Unschemaed object: `movie_id`, `title`, `recommendations` with IDs, titles, genres, similarity | `recommendation_service.get_similar_movies` and lifespan model |
+| `GET /api/v1/recommendations/similar/{movie_id}` | `k=1..20`, default 5 | `SimilarMoviesResponse`: `movie_id`, `title`, `recommendations` with IDs, titles, nullable genres, similarity | `recommendation_service.get_similar_movies` and lifespan model |
 | `POST /api/v1/watchlist/` | `WatchlistCreate` | `WatchlistItemResponse`; 201 | `watchlist_service.add_to_watchlist` |
 | `GET /api/v1/watchlist/{user_id}` | Paging | `WatchlistResponse` | `watchlist_service.get_user_watchlist` |
 | `PATCH /api/v1/watchlist/{user_id}/{movie_id}` | `WatchlistUpdate` | `WatchlistItemResponse` | `watchlist_service.update_watchlist_status` |
@@ -29,7 +30,7 @@ MovieVerse has a working FastAPI backend and five-page Streamlit client. The liv
 | `GET /api/v1/analytics/popular` | `limit=1..100` | `MoviesResponse` | `analytics_service.get_popular` |
 | `GET /api/v1/analytics/watchlist` | None | `WatchlistAnalyticsResponse` | `analytics_service.get_watchlist` |
 
-Routes mostly delegate to services. The recommendation route directly checks model readiness and movie existence, while the watchlist service raises HTTP exceptions itself. Analytics routes centralize SQLAlchemy failures into a rollback and HTTP 503; other routes have less uniform database error handling. The recommendation route lacks a declared Pydantic response model.
+Routes mostly delegate to services. The recommendation route directly checks model readiness and movie existence, while the watchlist service raises HTTP exceptions itself. Analytics routes centralize SQLAlchemy failures into a rollback and HTTP 503; other routes have less uniform database error handling. Stage 0C Part 2B added a declared Pydantic response model to the recommendation route without changing its JSON fields or HTTP behavior.
 
 ## Database architecture
 
@@ -47,7 +48,7 @@ The models declare foreign keys but no SQLAlchemy `relationship()` properties. T
 
 ## Pydantic contracts
 
-`schemas/movie.py` defines a single movie and paginated movie list. `schemas/watchlist.py` defines the four allowed statuses, create/update input, item output, and paginated list. `schemas/analytics.py` defines the overview, genre counts, rating counts, rated-movie lists, and watchlist analytics responses. `schemas/rating.py` is empty. These contracts are wired to the routes indicated above; only the recommendation route returns a plain dictionary without `response_model`.
+`schemas/movie.py` defines a single movie and paginated movie list. `schemas/watchlist.py` defines the four allowed statuses, create/update input, item output, and paginated list. `schemas/analytics.py` defines the overview, genre counts, rating counts, rated-movie lists, and watchlist analytics responses. Stage 0C Part 2B added `schemas/recommendation.py` for the similar-movie item and response. `schemas/rating.py` is empty. All current resource routes now declare response models, including the recommendation route, which still returns a dictionary for FastAPI to validate and serialize.
 
 ## Service boundaries
 

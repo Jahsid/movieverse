@@ -20,7 +20,7 @@ flowchart LR
     KNN -->|app.state.recommender| RS
 ```
 
-`get_db` yields a request session and closes it afterward. The startup session reads all ratings and closes in `finally`. The recommendation API relies on the trained object on application state; it returns 503 when that object is unavailable. The root health endpoint does not query PostgreSQL.
+`get_db` yields a request session and closes it afterward. The startup session reads all ratings and closes in `finally`. Database query failure or memory exhaustion stops startup; empty ratings or ordinary model training failure leave the catalogue accessible but no trained recommender. The recommendation API relies on the trained object on application state and returns 503 when it is unavailable. `/health` reports process liveness without a database call; `/ready` checks the database with `SELECT 1` and the model's trained flag. These checks do not train or load a model.
 
 ## ETL: raw CSV to tables
 
@@ -59,7 +59,7 @@ flowchart LR
 
 `MovieRecommender.train` pivots user/movie ratings to a movie-user matrix, fills absent ratings with zero, stores a sparse CSR matrix and fits cosine `NearestNeighbors`. `recommend` finds neighboring movie IDs and similarity scores; `recommend_for_user` uses liked movies as seeds, aggregates candidate scores and excludes already-rated movie IDs. The live route exposes only `recommend` via `recommendation_service`, which performs one movie lookup for candidate metadata.
 
-`ContentBasedRecommender.fit` builds TF-IDF vectors from pipe-separated genres and fits cosine neighbors. It supports similar movies and a weighted genre profile for a user's ratings, excluding seen movies. `hybrid_service.recommend_hybrid_for_user` combines KNN, content and popularity candidate scores with weights. `evaluation.py` computes precision/recall and random/temporal/popularity/rolling comparisons. `evaluate_recommender.py` loads CSV movie metadata and PostgreSQL ratings for offline experiments. Neither content nor hybrid has an HTTP route, and no model save/load artifact path was found. `models/` is empty. The second `evaluate_multi_seed_model` in `model.py` is not called and has a missing symbol; the CLI imports the distinct implementation from `evaluation.py`.
+`ContentBasedRecommender.fit` builds TF-IDF vectors from pipe-separated genres and fits cosine neighbors. It supports similar movies and a weighted genre profile for a user's ratings, excluding seen movies. `hybrid_service.recommend_hybrid_for_user` combines KNN, content and popularity candidate scores with weights. `evaluation.py` computes precision/recall and random/temporal/popularity/rolling comparisons. `evaluate_recommender.py` loads CSV movie metadata and PostgreSQL ratings for offline experiments. Neither content nor hybrid has an HTTP route, and no model save/load artifact path was found. `models/` is empty. The unused, broken second `evaluate_multi_seed_model` in `model.py` was removed in Stage 0C Part 2A; the CLI continues to import the authoritative implementation from `evaluation.py`.
 
 ## Watchlist request flow
 

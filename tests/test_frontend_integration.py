@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from tests.test_analytics import database, seed  # noqa: F401
+from tests.helpers import seed
 
 from app.database.connection import get_db
 from app.main import app

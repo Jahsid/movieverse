@@ -1,9 +1,6 @@
 """Watchlist API tests with an in-memory session double; no database is contacted."""
 
-import os
 from datetime import datetime
-
-os.environ["DATABASE_URL"] = "postgresql+psycopg://unused:unused@127.0.0.1:1/unused"
 
 import pytest
 from fastapi.testclient import TestClient

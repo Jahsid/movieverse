@@ -5,8 +5,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
-from tests.test_analytics import database  # noqa: F401
-
 from app.data_pipeline.extractor import extract_movies, extract_ratings
 from app.data_pipeline.transformer import transform_movies, transform_ratings
 from app.data_pipeline.validator import validate_movies, validate_ratings

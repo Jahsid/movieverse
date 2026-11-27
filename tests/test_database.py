@@ -4,8 +4,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from tests.test_analytics import client, database  # noqa: F401
-
 from app.database.models import Movie, Rating, User, Watchlist
 
 

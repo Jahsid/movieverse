@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 from app.database.models import Movie
+from app.schemas.recommendation import SimilarMoviesResponse
 from app.services.recommendation_service import get_similar_movies
 
 
@@ -13,7 +14,7 @@ router = APIRouter(
 )
 
 
-@router.get("/similar/{movie_id}")
+@router.get("/similar/{movie_id}", response_model=SimilarMoviesResponse)
 def recommend_similar_movies(
     movie_id: int,
     request: Request,

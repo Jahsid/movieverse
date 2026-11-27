@@ -1,15 +1,17 @@
 # Watchlist schema repair
 
+> **Current check (2026-11-27):** An approved read-only inspection of the configured PostgreSQL database found `watchlist.updated_at` present and non-null with a current-time default, and `status` non-null with a `PLANNED` default. All five ORM tables and inspected constraints match. The SQL file's execution history is unverified because no migration ledger was found. **Do not apply the migration to this target based on the old audit below.** Recheck the exact target before any future migration. See [Stage 0C Part 1B findings](../docs/progress.md#stage-0c-part-1b--approved-read-only-postgresql-schema-verification-2026-11-27).
+
 The application uses `Base.metadata.create_all()` in `load_data.py`. That creates
 missing tables but does not add columns or alter constraints on existing tables.
 There is no Alembic migration setup in this repository.
 
-The read-only schema audit found that Render's `watchlist` table lacks
+The earlier read-only schema audit found that Render's `watchlist` table lacked
 `updated_at`, and that `status` is nullable with no database default. The
 model expects `updated_at` as a non-null `TIMESTAMP WITHOUT TIME ZONE` with a
 current-time server default, and `status` as non-null with a `PLANNED` server
 default. `added_at` is nullable in both model and database. The audit found
-zero watchlist rows at inspection time; the migration still includes backfills
+zero watchlist rows at that inspection time; the migration still includes backfills
 to preserve records if rows are added before it runs.
 
 Review the [SQL migration](20261125_watchlist_updated_at.sql) before applying

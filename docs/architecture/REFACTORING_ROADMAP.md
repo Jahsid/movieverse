@@ -38,7 +38,7 @@ movieverse/
 └── .gitignore
 ```
 
-This is deliberately close to the current layout. Subpackage `__init__.py` markers are omitted from the drawing for clarity, not proposed for deletion. A recommendation response schema is proposed only if the API contract is formalized. Agentic AI, LangGraph, MCP, and advanced data-engineering tools are explicitly deferred to the learning stages in the approved roadmap; they are not baseline refactoring requirements. No database replacement is proposed.
+This is deliberately close to the current layout. Subpackage `__init__.py` markers are omitted from the drawing for clarity, not proposed for deletion. The recommendation response schema was added in Stage 0C Part 2B. Agentic AI, LangGraph, MCP, and advanced data-engineering tools are explicitly deferred to the learning stages in the approved roadmap; they are not baseline refactoring requirements. No database replacement is proposed.
 
 ## Proposed moves or removals, with impact
 
@@ -48,10 +48,10 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 | `load_data.py` | `scripts/load_data.py` | Group operational CLIs | Update AGENTS/README commands and imports/working-directory path handling | Medium; CSV paths and Python import root | Optional |
 | `evaluate_recommender.py` | `scripts/evaluate_recommender.py` | Group offline evaluation | Update commands, imports, CSV path handling | Medium; experiment entry point | Optional |
 | `check_database.py`, `explore_data.py` | `scripts/manual_checks/` | Separate diagnostics from app/test entry points | Update invocation commands; add main guards | Low | Optional |
-| Root `test_pipeline.py`, `test_content_based.py`, `test_hybrid.py`, `test_hybrid_service.py` | `scripts/manual_checks/` or convert asserted cases to `tests/` | Stop pytest collection side effects; distinguish smoke scripts | Update commands/import paths; preserve unique assertions as tests | Medium; collection count changes | P2 |
+| Root `test_pipeline.py`, `test_content_based.py`, `test_hybrid.py`, `test_hybrid_service.py` | `scripts/manual_checks/` or convert asserted cases to `tests/` | Distinguish smoke scripts; Part 2C already guarded execution without moving files | Update commands/import paths if moved; preserve unique assertions | Medium; manual commands change if moved | Optional after Part 2C |
 | `tests/test_recommendations.py` | `scripts/manual_checks/recommendations.py` | It is a guarded database CLI, not a pytest case | Update documented command/import path | Low | Optional |
-| Shared fixtures in `tests/test_analytics.py` | `tests/conftest.py` | Remove cross-test-module fixture imports | Update test imports/fixtures only | Low; test setup must stay isolated | P2 |
-| `app/recommender/model.py` second evaluator | Remove after replacement/verification or repair in place | Duplicates `evaluation.py` and calls undefined metric | No current callers found; add test and recheck external consumers | Medium; possible untracked external import | P1 |
+| Shared fixtures in `tests/test_analytics.py` | Moved to `tests/conftest.py` in Stage 0C Part 2C; shared seed data moved to `tests/helpers.py` | Remove cross-test-module fixture imports | Test assertions and fixture scopes preserved | Low; isolated suite verified | Completed |
+| `app/recommender/model.py` second evaluator | Removed in Stage 0C Part 2A | Duplicated `evaluation.py` and called an undefined metric | No internal callers found; retained path has a regression test | External imports cannot be ruled out | Completed |
 | `app/schemas/rating.py` | Consider removal | Empty and unreferenced | Check external imports; no internal changes expected | Low | P3 optional |
 | `app/utils/logger.py` plus empty package | Consider removal or implement logging there | Empty and unreferenced | Check external imports; if implementing, add callers | Low | P3 optional |
 | `README.md` | Filled in place in Stage 0B | Was an empty root entry document | None | Low | Completed documentation task |
@@ -67,8 +67,8 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 
 ### P1: important architecture
 
-1. Fix or remove the duplicate `model.py` evaluator after adding a test proving the missing-metric failure and checking external callers.
-2. Add a Pydantic response model for the similar-movie route and contract tests, preserving its existing wire format.
+1. Completed in Stage 0C Part 2A: reproduced the missing-metric failure, removed the unused duplicate, and tested the retained `evaluation.py` behavior. No internal caller depended on the removed function; external imports cannot be ruled out.
+2. Completed in Stage 0C Part 2B: added a Pydantic response model for the similar-movie route and contract tests while preserving its existing wire format.
 3. Define startup and readiness behavior for empty/large rating tables. Measure initialization time and memory before choosing persistence or lazy loading.
 4. `README.md` was populated in Stage 0B with setup, test safety and current API/frontend scope. Continue improving migration guidance and consider version constraints for reproducible installs.
 
@@ -90,8 +90,8 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 ## Keep, improve, investigate, potential removal
 
 - **Keep:** `app/main.py`, all four API routers, `database/connection.py` and `models.py`, active schemas/services/pipeline/recommender modules, all frontend modules, raw CSVs, migration files, `scripts/schema_audit.py`, `.gitignore`, `.env` as local untracked configuration, and automated tests.
-- **Improve:** Keep `README.md` current; address the unschemaed recommendation response, startup/readiness handling, cross-test fixtures, manual checks collected by pytest, hybrid normalization, and error/logging consistency.
+- **Improve:** Keep `README.md` current; address startup/readiness handling, cross-test fixtures, manual checks collected by pytest, hybrid normalization, and error/logging consistency. The recommendation response was schemaed in Stage 0C Part 2B.
 - **Investigate:** deployed PostgreSQL schema and migration state; empty `models/` persistence plans; external imports of placeholder files; direct need for `plotly`/`python-multipart`.
-- **Potential removal after explicit verification:** empty `app/schemas/rating.py`, empty `app/utils/logger.py`/package, duplicate evaluator in `model.py`, and redundant root `test_hybrid.py` after preserving unique assertions. Do not delete source datasets, migrations, secrets, or artifacts.
+- **Potential removal after explicit verification:** empty `app/schemas/rating.py`, empty `app/utils/logger.py`/package, and redundant root `test_hybrid.py` after preserving unique assertions. The duplicate evaluator in `model.py` was removed in Stage 0C Part 2A. Do not delete source datasets, migrations, secrets, or artifacts.
 
-The recommended Stage 0C work is an isolated PostgreSQL contract check plus a narrowly scoped fix for the duplicate evaluator and recommendation response contract. The 63-test result recorded by the 2026-11-25 audit is historical; it tested mostly SQLite/mocked behavior and does not establish current or deployed database compatibility.
+Stage 0C Part 1B completed a read-only PostgreSQL schema comparison, Part 2A removed the duplicate evaluator, and Part 2B added a typed recommendation response. The 63-test result recorded by the 2026-11-25 audit is historical; Part 2B's isolated suite has 68 passing tests, still mostly SQLite/mocked behavior.

@@ -8,9 +8,9 @@ This table records the 2026-11-25 application audit. Stage 0B later populated `R
 
 | File | Purpose; main definitions | Principal imports/calls | Called by / execution | Status | Recommendation |
 |---|---|---|---|---|---|
-| `app/main.py` | FastAPI app, `lifespan`, `/`, `/health`; router registration | SessionLocal, Rating, pandas, MovieRecommender, four routers | `uvicorn app.main:app`; TestClient | ACTIVE | Improve startup/readiness observability |
+| `app/main.py` | FastAPI app, `lifespan`, `/`, `/health`, `/ready`; router registration | SessionLocal, Rating, pandas, MovieRecommender, four routers | `uvicorn app.main:app`; TestClient | ACTIVE | Preserve Part 2D startup/readiness policy; measure full startup later |
 | `app/api/movies.py` | List, search, detail endpoints | movie_service, movie schemas, `get_db` | `app/main.py` | ACTIVE | Keep |
-| `app/api/recommendations.py` | Similar-movie endpoint, model readiness and movie checks | recommendation_service, Movie, `get_db` | `app/main.py` | ACTIVE | Add response schema in future |
+| `app/api/recommendations.py` | Similar-movie endpoint, model readiness and movie checks | recommendation_service, Movie, `get_db`, recommendation response schema | `app/main.py` | ACTIVE | Preserve existing JSON and 503 behavior |
 | `app/api/watchlist.py` | CRUD routes, query validation | watchlist_service, watchlist schemas, `get_db` | `app/main.py` | ACTIVE | Keep |
 | `app/api/analytics.py` | Six statistics routes and SQL error adapter | analytics_service, analytics schemas, `get_db` | `app/main.py` | ACTIVE | Keep; align error policy |
 | `app/api/__init__.py` | Empty package marker | Python package import machinery | API imports | ACTIVE | Keep |
@@ -23,6 +23,7 @@ This table records the 2026-11-25 application audit. Stage 0B later populated `R
 | `app/database/models.py` | `Movie`, `User`, `Rating`, `Watchlist`, `IngestionJob` | `Base`, SQLAlchemy columns/FKs | Services, app, CLI, tests | ACTIVE | Keep; verify deployed schema separately |
 | `app/database/__init__.py` | Empty package marker | Package machinery | Database imports | ACTIVE | Keep |
 | `app/schemas/movie.py` | `MovieResponse`, `MovieListResponse` | Pydantic | Movie routes | ACTIVE | Keep |
+| `app/schemas/recommendation.py` | `SimilarMovieItem`, `SimilarMoviesResponse`; added in Stage 0C Part 2B | Pydantic | Recommendation route | ACTIVE | Keep the current JSON contract |
 | `app/schemas/watchlist.py` | `WatchlistStatus`, create/update/item/list models | Pydantic | Watchlist routes/service | ACTIVE | Keep |
 | `app/schemas/analytics.py` | Overview/genre/rating/ranked-movie/watchlist analytics models | Pydantic | Analytics routes | ACTIVE | Keep |
 | `app/schemas/rating.py` | Empty placeholder; no classes/functions | None | No reference found | UNUSED | Consider removal after confirming no external import |
@@ -42,7 +43,7 @@ This table records the 2026-11-25 application audit. Stage 0B later populated `R
 | `app/data_pipeline/validator.py` | `_valid_positive_ids`, `validate_movies`, `validate_ratings` | pandas/NumPy validation | `load_data.py`, manual checks, tests | ACTIVE | Keep |
 | `app/data_pipeline/transformer.py` | `transform_movies`, `transform_ratings` | pandas conversions/year extraction | `load_data.py`, manual checks, tests | ACTIVE | Keep |
 | `app/data_pipeline/__init__.py` | Empty package marker | Package machinery | Pipeline imports | ACTIVE | Keep |
-| `app/recommender/model.py` | `MovieRecommender` KNN and a second `evaluate_multi_seed_model` | pandas, SciPy CSR, sklearn NN | App startup, evaluation, tests | PARTIALLY USED | Retain KNN; investigate broken duplicate evaluator |
+| `app/recommender/model.py` | `MovieRecommender` KNN; duplicate evaluator removed in Stage 0C Part 2A | pandas, SciPy CSR, sklearn NN | App startup, evaluation, tests | ACTIVE | Keep KNN; use `evaluation.py` for offline metrics |
 | `app/recommender/content_based.py` | `ContentBasedRecommender`: genre TF-IDF and user profile | pandas, sklearn | Offline evaluation/manual checks/tests; no API | ACTIVE | Keep as offline algorithm |
 | `app/recommender/hybrid.py` | `normalize_scores`, `calculate_hybrid_scores`, `calculate_popularity_scores` | pandas/NumPy | Hybrid service/evaluation/tests | ACTIVE | Review repeated normalization |
 | `app/recommender/hybrid_service.py` | `recommend_hybrid_for_user` | KNN, content, hybrid scoring | Offline evaluation/manual check/tests; no API | ACTIVE | Keep; simplify scoring after tests |
@@ -72,11 +73,13 @@ This table records the 2026-11-25 application audit. Stage 0B later populated `R
 | `evaluate_recommender.py` | Offline evaluation CLI `main`; top-level CSV read | Evaluation functions, DB ratings, pandas | Explicit CLI | ACTIVE | Improve import side effects; keep experiments |
 | `check_database.py` | Counts/sample read-only DB check at import | DB engine/SQL | Explicit CLI | ACTIVE | Move to manual scripts optionally; guard execution |
 | `explore_data.py` | CSV exploration prints at import | pandas, raw CSV | Explicit CLI | ACTIVE | Optional manual-scripts move; guard execution |
-| `test_pipeline.py` | ETL smoke output at import | Extract/validate/transform, CSV | Explicit CLI and pytest collection | ACTIVE | Convert to assertions or rename as manual check |
-| `test_content_based.py` | Content model smoke with sample inputs at import | Content model, raw movies | Explicit CLI and pytest collection | ACTIVE | Convert or rename; avoid collection side effects |
-| `test_hybrid.py` | Synthetic hybrid assertions at import | Hybrid scoring | Explicit CLI and pytest collection | DUPLICATE | Fold unique cases into automated tests, then consider removal |
+| `test_pipeline.py` | Guarded manual ETL smoke output | Extract/validate/transform, CSV | Explicit CLI; pytest imports without executing main | ACTIVE | Optionally convert to asserted tests later |
+| `test_content_based.py` | Guarded manual content model smoke | Content model, raw movies | Explicit CLI; pytest imports without executing main | ACTIVE | Optionally convert to asserted tests later |
+| `test_hybrid.py` | Guarded manual synthetic hybrid assertions | Hybrid scoring | Explicit CLI; pytest imports without executing main | DUPLICATE | Fold unique cases into automated tests only if useful |
 | `test_hybrid_service.py` | DB-dependent hybrid smoke `main` | DB ratings, KNN/content/hybrid | Explicit CLI only; guarded main | ACTIVE | Keep as manual runner or move after command updates |
-| `tests/test_analytics.py` | Analytics API fixtures and cases | TestClient, SQLite StaticPool | pytest; fixture imports from other tests | ACTIVE | Extract shared fixtures later |
+| `tests/conftest.py` | Shared function-scoped SQLite and TestClient fixtures; unreachable test DB URL | pytest, SQLite StaticPool | pytest fixture discovery | ACTIVE | Keep shared setup and teardown here |
+| `tests/helpers.py` | Shared analytics/frontend seed records | SQLAlchemy models | Imported by two test modules | ACTIVE | Keep non-fixture test data separate |
+| `tests/test_analytics.py` | Analytics API cases and lifespan check | Shared fixtures and seed helper | pytest | ACTIVE | Keep endpoint assertions here |
 | `tests/test_database.py` | FK, unique, rollback, session checks | SQLite fixture, ORM | pytest | ACTIVE | Keep; add isolated PostgreSQL contract tests if needed |
 | `tests/test_frontend_integration.py` | API client, Streamlit AppTest and UI actions | mocked HTTP/TestClient, SQLite | pytest | ACTIVE | Keep |
 | `tests/test_ingestion.py` | CSV validation and ingestion error/idempotency behavior | tmp CSV, mocks, PostgreSQL insert compilation | pytest | ACTIVE | Keep; live PG not exercised |
@@ -101,4 +104,4 @@ This table records the 2026-11-25 application audit. Stage 0B later populated `R
 
 ## Test safety and evidence limits
 
-The executed `pytest` run collected 63 passing tests. The API/database test fixtures use in-memory SQLite, dependency overrides, fake sessions, or mocked PostgreSQL insert behavior; Streamlit tests mock HTTP. Root-level `test_pipeline.py` and `test_content_based.py` execute CSV work at pytest import/collection time, and `test_hybrid.py` runs assertions then. Guarded database manual runners are not invoked by pytest. No test in this suite was observed issuing destructive SQL to the configured Render database. This does **not** verify PostgreSQL behavior or production schema. The audit did not execute `load_data.py`, database manual runners, or migrations.
+The original audit executed 63 passing tests. In Stage 0C Part 2C, collection and execution each found 68 tests; the five-case increase predates Part 2C. API/database tests use in-memory SQLite, dependency overrides, fake sessions, or mocked PostgreSQL insert behavior; Streamlit tests mock HTTP. The three root manual checks are still discovered by filename but execute no work during collection. Database-dependent manual runners are not invoked by pytest. This does **not** verify PostgreSQL behavior or production schema. `load_data.py`, database manual runners, and migrations were not executed in Part 2C.

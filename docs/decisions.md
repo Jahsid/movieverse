@@ -32,11 +32,20 @@ This log records approved choices and unresolved questions. The [current-state a
 - **Reason:** Reproducibility and credibility matter more than speculative performance claims.
 - **Consequence:** Historical test results are labeled by date and never presented as a fresh run.
 
+## D-005 — Separate liveness from full readiness
+
+- **Status:** Implemented in Stage 0C Part 2D; pending review.
+- **Decision:** Keep the existing `/health` response unchanged. Add `/ready`, returning 200 only when a `SELECT 1` database probe succeeds and the recommendation model is trained; otherwise return 503 with generic component statuses. Database query failure or memory exhaustion during lifespan stops startup. Empty ratings or ordinary model initialization failure allow catalogue and analytics routes to start, while recommendation requests and `/ready` return 503.
+- **Reason:** A running process can serve catalogue functions without a model, but cannot serve database-backed routes without a database. Distinct endpoints make that partial state explicit without retraining on probe requests.
+- **Alternatives considered:** Fail startup for every model problem; make `/health` depend on the model; declare the whole app ready when only catalogue routes work. Each would either lose useful catalogue access or obscure the existing `/health` contract and full recommendation readiness.
+- **Consequences and limits:** A deployment using `/ready` as a whole-service gate may withhold catalogue traffic during model failure. The probe is one lightweight SQL statement but current engine connection settings do not guarantee a hard response-time bound. A later isolated deployment exercise can decide whether to add connection and statement timeouts or separate catalogue readiness.
+
 ## Open decisions for Stage 0C and later
+
 
 | Question | Evidence needed before deciding |
 |---|---|
-| Is the watchlist SQL migration already applied to the configured PostgreSQL database? | Read-only schema audit against the intended target; no migration in Stage 0B |
+| Was the watchlist SQL migration file actually executed? | The approved 2026-11-27 read-only audit found its intended schema shape, but no migration ledger. Execution history remains unknown; do not reapply based on the earlier audit. |
 | What replaces startup KNN training? | Baseline startup time/RAM, artifact size/load time, failure handling and test results |
 | Should ingestion or experiment scripts move? | Stable commands/import paths, contract tests, and a concrete maintenance benefit |
 | Which advanced learning tools should be promoted? | Stage-specific quality, latency, cost, resource, and operational comparison |

@@ -8,7 +8,7 @@ MovieVerse is a Python movie discovery, recommendation, and analytics project. I
 - A similar-movie API backed by item-based cosine KNN trained from database ratings when the API starts.
 - CSV validation and PostgreSQL ingestion, plus offline content-based, hybrid, and temporal evaluation code.
 
-Content-based and hybrid recommendations are **not** live API features. There is no saved model loader, deep-learning model, RAG system, or agent workflow yet. The API requires ratings in the database to start. `/health` is a static liveness response, not a database or model readiness check.
+Content-based and hybrid recommendations are **not** live API features. There is no saved model loader, deep-learning model, RAG system, or agent workflow yet. The API requires a working database to start. With no ratings or an ordinary model training failure, catalogue routes can still start while recommendations return 503; memory exhaustion stops startup. `/health` retains its static liveness response; `/ready` checks the database and trained recommendation model and returns 503 if either is unavailable.
 
 ## Repository guide
 

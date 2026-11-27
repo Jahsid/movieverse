@@ -1,7 +1,5 @@
 """Movie routes against isolated SQLAlchemy records."""
 
-from tests.test_analytics import database, client  # noqa: F401
-
 from app.database.models import Movie
 
 

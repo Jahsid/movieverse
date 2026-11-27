@@ -1,63 +1,16 @@
 """Analytics API tests using an isolated, in-memory SQL database."""
 
 import importlib
-import os
-
-os.environ["DATABASE_URL"] = "postgresql+psycopg://unused:unused@127.0.0.1:1/unused"
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from app.database.connection import Base, get_db
-from app.database.models import Movie, Rating, User, Watchlist
+from app.database.connection import get_db
 from app.main import app
+from tests.helpers import seed
 
 BASE_URL = "/api/v1/analytics"
-
-
-@pytest.fixture
-def database():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
-                           poolclass=StaticPool)
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
-
-
-@pytest.fixture
-def client(database):
-    app.dependency_overrides[get_db] = lambda: database
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-def seed(database):
-    database.add_all([
-        Movie(movie_id=1, title="Alpha", genres="Comedy|Drama|Comedy"),
-        Movie(movie_id=2, title="Beta", genres="Drama|Sci-Fi"),
-        Movie(movie_id=3, title="Gamma", genres="(no genres listed)"),
-        Movie(movie_id=4, title="Unrated", genres=None),
-        User(user_id=1), User(user_id=2), User(user_id=3),
-    ])
-    database.flush()
-    database.add_all([
-        Rating(user_id=1, movie_id=1, rating=5.0),
-        Rating(user_id=2, movie_id=1, rating=4.0),
-        Rating(user_id=3, movie_id=1, rating=4.0),
-        Rating(user_id=1, movie_id=2, rating=5.0),
-        Rating(user_id=2, movie_id=2, rating=5.0),
-        Rating(user_id=1, movie_id=3, rating=0.5),
-        Watchlist(user_id=1, movie_id=1, status="PLANNED"),
-        Watchlist(user_id=2, movie_id=1, status="WATCHING"),
-        Watchlist(user_id=1, movie_id=2, status="COMPLETED"),
-    ])
-    database.commit()
 
 
 def test_overview_and_genres(client, database):
@@ -172,6 +125,7 @@ def test_local_app_startup_and_existing_apis(database, monkeypatch):
     try:
         with TestClient(app) as client:
             assert client.get("/docs").status_code == 200
+            assert client.get("/ready").status_code == 200
             for route in ("overview", "genres", "ratings", "top-rated", "popular", "watchlist"):
                 assert client.get(f"{BASE_URL}/{route}").status_code == 200
             assert client.get("/api/v1/movies/1").json()["title"] == "Alpha"

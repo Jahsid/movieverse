@@ -1,94 +1,96 @@
 import pandas as pd
 
-from app.recommender.hybrid import calculate_popularity_scores
-from app.recommender.hybrid import normalize_scores
-
-knn_scores = {
-    1: 0.60,
-    2: 0.75,
-    3: 0.90
-}
-
-normalized = normalize_scores(knn_scores)
-
-print("Original scores:", knn_scores)
-print("Normalized scores:", normalized)
-
-assert normalized[1] == 0.0
-assert normalized[2] == 0.5
-assert normalized[3] == 1.0
-
-print("All tests passed!")
-
-
 from app.recommender.hybrid import (
+    calculate_hybrid_scores,
+    calculate_popularity_scores,
     normalize_scores,
-    calculate_hybrid_scores
 )
 
-# Test 1: Normalization
-scores = {1: 0.60, 2: 0.75, 3: 0.90}
-normalized = normalize_scores(scores)
+def main():
+    knn_scores = {
+        1: 0.60,
+        2: 0.75,
+        3: 0.90
+    }
 
-assert normalized[1] == 0.0
-assert normalized[2] == 0.5
-assert normalized[3] == 1.0
+    normalized = normalize_scores(knn_scores)
 
-# Test 2: Hybrid scoring
-knn_scores = {
-    1: 0.90,
-    2: 0.60,
-    3: 0.30
-}
+    print("Original scores:", knn_scores)
+    print("Normalized scores:", normalized)
 
-content_scores = {
-    1: 0.30,
-    2: 0.95,
-    3: 0.70
-}
+    assert normalized[1] == 0.0
+    assert normalized[2] == 0.5
+    assert normalized[3] == 1.0
 
-popularity_scores = {
-    1: 0.80,
-    2: 0.40,
-    3: 1.00
-}
+    print("All tests passed!")
 
-hybrid = calculate_hybrid_scores(
-    knn_scores,
-    content_scores,
-    popularity_scores
-)
 
-print("Hybrid recommendations:")
+    # Test 1: Normalization
+    scores = {1: 0.60, 2: 0.75, 3: 0.90}
+    normalized = normalize_scores(scores)
 
-for movie_id, score in hybrid.items():
-    print(f"Movie {movie_id}: {score:.4f}")
+    assert normalized[1] == 0.0
+    assert normalized[2] == 0.5
+    assert normalized[3] == 1.0
 
-assert list(hybrid.keys())[0] == 1
+    # Test 2: Hybrid scoring
+    knn_scores = {
+        1: 0.90,
+        2: 0.60,
+        3: 0.30
+    }
 
-assert abs(hybrid[1] - 0.6333) < 0.001
-assert abs(hybrid[2] - 0.5500) < 0.001
-assert abs(hybrid[3] - 0.3846) < 0.001
+    content_scores = {
+        1: 0.30,
+        2: 0.95,
+        3: 0.70
+    }
 
-print("Hybrid scoring tests passed!")
+    popularity_scores = {
+        1: 0.80,
+        2: 0.40,
+        3: 1.00
+    }
 
-print("All tests passed!")
+    hybrid = calculate_hybrid_scores(
+        knn_scores,
+        content_scores,
+        popularity_scores
+    )
 
-sample_ratings = pd.DataFrame({
-    "user_id": [1, 2, 3, 1, 2, 3],
-    "movie_id": [101, 101, 101, 102, 102, 103],
-    "rating": [5.0, 4.5, 3.0, 4.0, 5.0, 2.0]
-})
+    print("Hybrid recommendations:")
 
-popularity = calculate_popularity_scores(
-    sample_ratings,
-    rating_threshold=4.0
-)
+    for movie_id, score in hybrid.items():
+        print(f"Movie {movie_id}: {score:.4f}")
 
-print("Popularity scores:", popularity)
+    assert list(hybrid.keys())[0] == 1
 
-assert popularity[101] == 2.0
-assert popularity[102] == 2.0
-assert 103 not in popularity
+    assert abs(hybrid[1] - 0.6333) < 0.001
+    assert abs(hybrid[2] - 0.5500) < 0.001
+    assert abs(hybrid[3] - 0.3846) < 0.001
 
-print("Popularity tests passed!")
+    print("Hybrid scoring tests passed!")
+
+    print("All tests passed!")
+
+    sample_ratings = pd.DataFrame({
+        "user_id": [1, 2, 3, 1, 2, 3],
+        "movie_id": [101, 101, 101, 102, 102, 103],
+        "rating": [5.0, 4.5, 3.0, 4.0, 5.0, 2.0]
+    })
+
+    popularity = calculate_popularity_scores(
+        sample_ratings,
+        rating_threshold=4.0
+    )
+
+    print("Popularity scores:", popularity)
+
+    assert popularity[101] == 2.0
+    assert popularity[102] == 2.0
+    assert 103 not in popularity
+
+    print("Popularity tests passed!")
+
+if __name__ == "__main__":
+    main()
