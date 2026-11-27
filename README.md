@@ -8,6 +8,7 @@ MovieVerse is a Python movie discovery, recommendation, and analytics project. I
 - A similar-movie API backed by item-based cosine KNN trained from database ratings when the API starts.
 - CSV validation and PostgreSQL ingestion, plus offline content-based, hybrid, and temporal evaluation code.
 - A read-only MovieLens dataset manifest with file hashes, sizes, CSV columns, and row counts.
+- A read-only data quality report with accepted/rejected counts and rejection reasons.
 
 Content-based and hybrid recommendations are **not** live API features. There is no saved model loader, deep-learning model, RAG system, or agent workflow yet. The API requires a working database to start. With no ratings or an ordinary model training failure, catalogue routes can still start while recommendations return 503; memory exhaustion stops startup. `/health` retains its static liveness response; `/ready` checks the database and trained recommendation model and returns 503 if either is unavailable.
 
@@ -30,6 +31,14 @@ Generate and inspect raw-file metadata without a database connection:
 ```
 
 To compare later, save a baseline outside Git with `--output $env:TEMP\movieverse-manifest.json`, then run the command with `--compare $env:TEMP\movieverse-manifest.json`. The CLI does not overwrite an existing output file. The documented source is MovieLens; the exact release version and source URL are unverified, so the manifest records them as `null`.
+
+Inspect data quality as JSON without loading the database:
+
+```powershell
+.venv-watchlist\Scripts\python.exe -m app.data_pipeline.quality_report
+```
+
+The report uses the same movie and rating rules as fail-fast ingestion validation and checks valid rating movie IDs against the movie file. Its reason counts can overlap when a row has several errors; accepted plus rejected always equals total. User references and database state are not checked.
 
 The detailed current-state inventory is in [docs/architecture/PROJECT_STRUCTURE.md](docs/architecture/PROJECT_STRUCTURE.md). The approved staged plan is in [ROADMAP.md](ROADMAP.md).
 

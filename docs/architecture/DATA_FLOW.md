@@ -38,6 +38,10 @@ flowchart LR
 
 The Stage 1A manifest is a separate read-only inspection path: `data/raw/{movies,ratings}.csv` → streamed SHA-256 and CSV parser → JSON metadata on stdout or an explicitly chosen file. It does not feed `load_data.py` or change PostgreSQL. The content fingerprint can identify changed input bytes before a future ingestion attempt, but no automatic skip or lineage record is implemented yet.
 
+Stage 1B adds another read-only path: the manifest identifies input bytes, the existing extractors read the raw CSVs, and shared validator masks produce a JSON quality report. A movie ID or `(userId, movieId)` rating key is a duplicate when its valid numeric key appeared earlier in that file; the later row is rejected even if the earlier row has another error. Invalid keys are not treated as duplicate keys. Reason counts can overlap, while rejected-record totals use the union of row masks. The report does not transform records, alter ingestion, or test cross-file references.
+
+Stage 1C extends that report with a read-only rating-to-movie check. Valid normalized rating movie IDs absent from valid `movies.csv` IDs are counted as orphan references and added to the existing union of rejection masks. Invalid rating movie IDs remain `invalid_id`, not orphan references. A missing movie ID column makes this check unverified rather than reporting zero orphans. The dataset fingerprint still identifies the inspected input bytes; ingestion and database behavior remain unchanged.
+
 ## Recommendation paths
 
 ```mermaid
