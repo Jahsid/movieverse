@@ -15,7 +15,7 @@
 
 | Stage | Baseline and proposed metric | Status |
 |---|---|
-| 0C | Local CSV/model training time, process peak RAM, direct model inference | Measured offline on 2026-11-27 below; API startup and HTTP latency unmeasured |
+| 0C | Local CSV/model training time, process peak RAM, direct model inference | Full-dataset offline KNN result below; separate 10,000-rating SQLite lifespan and in-process HTTP result below. Real network serving remains unmeasured. |
 | 1–2 | Ingestion rows/sec and peak RAM; Parquet size/query time; lab setup cost and lag | Unmeasured |
 | 3–5 | Precision/recall@K, coverage, artifact size, training time, startup and inference RAM/latency | Unmeasured |
 | 6–8 | Retrieval recall/MRR, grounded-claim rate, task completion, tool failures, p95 latency | Unmeasured |
@@ -57,3 +57,24 @@
 **Reproduction:** From the repository root, set `PYTHONDONTWRITEBYTECODE=1` and use `.venv-watchlist\Scripts\python.exe`. Read the three CSV columns as above, time `MovieRecommender.train` and 30 `recommend` calls with `time.perf_counter`, and inspect `model.movie_matrix` arrays. For process memory on Windows, query the same Python process with `GetProcessMemoryInfo`; `tracemalloc.get_traced_memory()` supplies the Python allocation peak. The full commands used were ephemeral stdin scripts and created no repository files. A controlled benchmark should repeat runs with fixed seeds/query sets and record distribution before using these figures as a performance claim.
 
 **Limits:** No configured database was contacted. Actual API startup includes DB connection, query/materialization, application imports, and lifespan behavior, so **startup wall time and peak RAM remain unverified**. HTTP p50/p95 and live schema behavior remain unverified. The two memory methods ran in separate processes and should not be subtracted from each other.
+
+## Stage 0C Part 2E — isolated application lifespan and in-process HTTP (2026-11-27)
+
+**Question and environment.** How long does the actual FastAPI lifespan take to load ratings, build a DataFrame, train KNN, and become ready with a disposable local dataset, and what is warmed in-process recommendation latency? Measured on Windows 11 build 26300, 11th Gen Intel Core i3-1115G4, 7.75 GiB physical RAM, Python 3.12.0 in `.venv-watchlist`. Key installed packages: FastAPI 0.165.0, Starlette 1.10.0, SQLAlchemy 2.1.9, pandas 3.1.1, NumPy 2.5.5, SciPy 1.18.1, scikit-learn 1.9.1, HTTPX 0.28.1, pytest 9.2.0. [The tested dependency snapshot](../constraints-tested-py312-win.txt) records all 61 installed application/test distributions. The app source used here includes Stage 0C Parts 2A–2D; no benchmark optimization was made.
+
+**Input and method.** `scripts/benchmark_startup.py` takes the first 10,000 rows of `data/raw/ratings.csv`: 66 users and 3,218 rated movies. It loads matching movie metadata, creates an in-memory SQLite schema, and inserts data before timing. It overrides application startup and request sessions to use only this engine; the configured external PostgreSQL database is never contacted. Each of three repetitions enters the **real FastAPI lifespan** through `TestClient`, checks `/ready`, warms the same similar-movie route five times, then times 30 in-process GET requests for movie 356 with `k=5`. Timing uses `time.perf_counter`; the rating-load component times the SQLAlchemy `.all()` call, DataFrame timing wraps construction, and training timing wraps the unchanged KNN training method. Lifespan time runs from just before TestClient entry until startup completes; time until readiness includes the first `/ready` response. HTTP p50 is the median and p95 is the nearest-rank observation. Windows `GetProcessMemoryInfo` gives current and process-high-water working set. Repetitions reuse one process and SQLite dataset, so later runs benefit from loaded imports, caches, and allocator state.
+
+| Metric | Run 1 | Run 2 | Run 3 |
+|---|---:|---:|---:|
+| Lifespan initialization | 0.1278 s | 0.0682 s | 0.0710 s |
+| Rating `.all()` load | 0.0148 s | 0.0104 s | 0.0119 s |
+| DataFrame construction | 0.0538 s | 0.0474 s | 0.0504 s |
+| KNN training | 0.0192 s | 0.0084 s | 0.0063 s |
+| Until first successful `/ready` response | 0.1415 s | 0.0724 s | 0.0744 s |
+| Working set before / after readiness | 206.59 / 209.10 MiB | 209.41 / 209.45 MiB | 209.41 / 209.45 MiB |
+| Process peak working set after readiness | 212.25 MiB | 212.65 MiB | 212.66 MiB |
+| Warm HTTP p50 / p95, 30 requests | 5.06 / 9.38 ms | 5.09 / 9.00 ms | 4.78 / 8.03 ms |
+
+Across all 90 measured HTTP requests, pooled p50 was **5.03 ms** and nearest-rank p95 was **9.00 ms**. These pooled values describe this one run, not a population guarantee. The process peak is a high-water mark since process launch and includes imports and SQLite setup; it is **not** startup-only peak memory. The app's existing startup print says “PostgreSQL,” but this benchmark uses SQLite exclusively. The earlier offline result used all 100,836 ratings and timed direct model calls, so its training, memory, and inference values are **not equivalent comparisons** with these 10,000-rating HTTP/lifespan results.
+
+**Interpretation and reproduction.** “Cold startup” normally includes a fresh process, imports, connection establishment, and initialization. This measures lifespan entry after imports and data setup, with the first repetition colder than the subsequent two but not true cold process startup. “Warm inference” follows five warm-up requests; its HTTP time includes FastAPI routing, TestClient transport, SQLite metadata lookup, serialization, and model inference, whereas direct offline model latency omits those layers. In PowerShell from the repository root run `$env:PYTHONDONTWRITEBYTECODE = '1'`, then `.venv-watchlist\Scripts\python.exe -m scripts.benchmark_startup --ratings 10000 --repetitions 3 --requests 30`. The script forces an unreachable loopback `DATABASE_URL` before importing the app and makes no external connection. It does write only to disposable in-memory SQLite. No live PostgreSQL load, real server socket, multi-process startup, network latency, or production memory measurement was made.

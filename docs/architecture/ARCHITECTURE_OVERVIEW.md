@@ -52,6 +52,8 @@ The models declare foreign keys but no SQLAlchemy `relationship()` properties. T
 
 ## Service boundaries
 
+Stage 1A added `app/data_pipeline/manifest.py`, a read-only CLI and helper that streams SHA-256 checksums and parses CSV records for file sizes, row counts, and columns. It records a UTC generation time separately from a timestamp-independent content fingerprint. It has no database import or ingestion call. The existing `load_data.py` still reads the fixed `data/raw/movies.csv` and `data/raw/ratings.csv` paths, validates them with pandas, transforms them, and calls `ingestion_service`; it does not yet consume the manifest.
+
 `movie_service` uses SQLAlchemy for count, pagination, title `ILIKE`, and detail lookup. `recommendation_service` maps KNN results to one movie query and preserves rank. `watchlist_service` implements CRUD and transaction handling. `analytics_service` performs SQL aggregates; genre counts read every movie genre string and split it in Python. `ingestion_service` batches PostgreSQL `ON CONFLICT DO NOTHING` inserts and records each ingestion job. These services have clear roles, although HTTP exceptions in `watchlist_service` couple it to FastAPI.
 
 ## Frontend and dependencies

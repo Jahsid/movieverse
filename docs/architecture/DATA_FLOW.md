@@ -36,6 +36,8 @@ flowchart LR
 
 `load_data.py` explicitly calls `Base.metadata.create_all`, then extraction, validation, transformation, and `load_movie_data`. Movie validation requires positive integral movie IDs, nonblank title and unique movie IDs. Rating validation requires user/movie IDs, rating and timestamp, enforces positive IDs, half-star values from 0.5 through 5.0, integral timestamp and unique user/movie pairs. Transformer strips titles, fills missing genres, casts fields, and derives release year from a title suffix. The ingestion service inserts users, movies and ratings in foreign-key order in batches of 1,000 using PostgreSQL conflict handling, records inserted counts in an `IngestionJob`, commits, and rolls back on failure. Repeated core rows are skipped, but each run creates a new ingestion-job record. Validation errors stop before ingestion. This is a PostgreSQL-specific ingestion path; SQLite tests mock its insert behavior.
 
+The Stage 1A manifest is a separate read-only inspection path: `data/raw/{movies,ratings}.csv` → streamed SHA-256 and CSV parser → JSON metadata on stdout or an explicitly chosen file. It does not feed `load_data.py` or change PostgreSQL. The content fingerprint can identify changed input bytes before a future ingestion attempt, but no automatic skip or lineage record is implemented yet.
+
 ## Recommendation paths
 
 ```mermaid

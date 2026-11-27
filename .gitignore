@@ -18,5 +18,8 @@ __pycache__/
 # Model artifacts
 models/*.pkl
 
+# Generated dataset manifests
+data/manifests/
+
 # IDE
 .vscode/
