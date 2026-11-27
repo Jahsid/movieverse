@@ -2,6 +2,8 @@
 
 Classification describes observed use, including CLI and pytest collection. `ACTIVE` does not mean part of the serving API. `PARTIALLY USED` means some defined behavior is not referenced. `DUPLICATE` denotes overlapping behavior even when a file is executed. `UNUSED` requires no meaningful reference or execution path found. All paths are relative to the repository root. “Caller” lists principal entry points rather than every transitive import. Inspected current worktree source, static references (`rg`), router registration, CLI guards, tests, config references, and artifact loading paths.
 
+This table records the 2026-11-25 application audit. Stage 0B later populated `README.md` and added planning/evidence documents; see [docs/progress.md](../progress.md). No application-file classification changed in Stage 0B.
+
 ## Application and API files
 
 | File | Purpose; main definitions | Principal imports/calls | Called by / execution | Status | Recommendation |
@@ -94,7 +96,7 @@ Classification describes observed use, including CLI and pytest collection. `ACT
 | `.env` | Local runtime configuration; values not inspected | dotenv in connection and schema audit | Runtime/operational use | ACTIVE | Preserve, never commit |
 | `.vscode/settings.json` | Python terminal env-file setting | VS Code | Local editor | ACTIVE | Keep local/ignored |
 | `requirements.txt` | Direct package dependency list | pip | Environment setup | ACTIVE | Review unused/unpinned dependencies |
-| `README.md` | Empty file | None | No useful content | UNUSED | Write setup/architecture guidance later |
+| `README.md` | Empty at the audit; populated in Stage 0B | Developer entry point | Repository readers | ACTIVE after Stage 0B | Maintain setup and architecture links |
 | `AGENTS.md` | Repository instructions | None | Codex/developer workflow | ACTIVE | Keep |
 
 ## Test safety and evidence limits

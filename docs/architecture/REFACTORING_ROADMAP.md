@@ -1,5 +1,7 @@
 # Proposed structure and refactoring roadmap
 
+> **Scope update (Stage 0B):** This is the earlier, narrow refactoring proposal for the existing application. Its P0–P3 labels are **priorities within baseline hardening**, not the approved Stage 0A–10 sequence. [ROADMAP.md](../../ROADMAP.md) is the authoritative development roadmap; [docs/decisions.md](../decisions.md) records the modular-monolith decision. No moves in this document have been approved for implementation merely by approving the roadmap.
+
 This document proposes future work only. No moves, deletions, refactors, environment changes, migrations, or database actions were performed in this audit. Preserve the current API contracts while changing layout.
 
 ## Proposed target tree
@@ -36,7 +38,7 @@ movieverse/
 └── .gitignore
 ```
 
-This is deliberately close to the current layout. Subpackage `__init__.py` markers are omitted from the drawing for clarity, not proposed for deletion. A recommendation response schema is proposed only if the API contract is formalized. No `agents/`, LangChain, database replacement, or new runtime framework is proposed.
+This is deliberately close to the current layout. Subpackage `__init__.py` markers are omitted from the drawing for clarity, not proposed for deletion. A recommendation response schema is proposed only if the API contract is formalized. Agentic AI, LangGraph, MCP, and advanced data-engineering tools are explicitly deferred to the learning stages in the approved roadmap; they are not baseline refactoring requirements. No database replacement is proposed.
 
 ## Proposed moves or removals, with impact
 
@@ -52,7 +54,7 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 | `app/recommender/model.py` second evaluator | Remove after replacement/verification or repair in place | Duplicates `evaluation.py` and calls undefined metric | No current callers found; add test and recheck external consumers | Medium; possible untracked external import | P1 |
 | `app/schemas/rating.py` | Consider removal | Empty and unreferenced | Check external imports; no internal changes expected | Low | P3 optional |
 | `app/utils/logger.py` plus empty package | Consider removal or implement logging there | Empty and unreferenced | Check external imports; if implementing, add callers | Low | P3 optional |
-| `README.md` | Fill in place | Empty root entry documentation | None | Low | P1 |
+| `README.md` | Filled in place in Stage 0B | Was an empty root entry document | None | Low | Completed documentation task |
 | `app/recommender/evaluation.py` | Keep initially; optionally split by experiment later | Large module with multiple evaluation strategies | Update `evaluate_recommender.py` imports and tests | Medium | P3 optional |
 | `data/raw/*`, `migrations/*`, `models/`, `.env` | Retain in current locations | Source data, migration, future artifacts, local secret | None | High if mishandled | Required retention |
 
@@ -68,7 +70,7 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 1. Fix or remove the duplicate `model.py` evaluator after adding a test proving the missing-metric failure and checking external callers.
 2. Add a Pydantic response model for the similar-movie route and contract tests, preserving its existing wire format.
 3. Define startup and readiness behavior for empty/large rating tables. Measure initialization time and memory before choosing persistence or lazy loading.
-4. Populate `README.md` with setup, isolated tests, migration workflow and actual API/frontend scope. Consider version constraints for reproducible installs.
+4. `README.md` was populated in Stage 0B with setup, test safety and current API/frontend scope. Continue improving migration guidance and consider version constraints for reproducible installs.
 
 ### P2: maintainability and measured performance
 
@@ -88,8 +90,8 @@ This is deliberately close to the current layout. Subpackage `__init__.py` marke
 ## Keep, improve, investigate, potential removal
 
 - **Keep:** `app/main.py`, all four API routers, `database/connection.py` and `models.py`, active schemas/services/pipeline/recommender modules, all frontend modules, raw CSVs, migration files, `scripts/schema_audit.py`, `.gitignore`, `.env` as local untracked configuration, and automated tests.
-- **Improve:** `README.md`, the unschemaed recommendation response, startup/readiness handling, cross-test fixtures, manual checks collected by pytest, hybrid normalization, and error/logging consistency.
+- **Improve:** Keep `README.md` current; address the unschemaed recommendation response, startup/readiness handling, cross-test fixtures, manual checks collected by pytest, hybrid normalization, and error/logging consistency.
 - **Investigate:** deployed PostgreSQL schema and migration state; empty `models/` persistence plans; external imports of placeholder files; direct need for `plotly`/`python-multipart`.
 - **Potential removal after explicit verification:** empty `app/schemas/rating.py`, empty `app/utils/logger.py`/package, duplicate evaluator in `model.py`, and redundant root `test_hybrid.py` after preserving unique assertions. Do not delete source datasets, migrations, secrets, or artifacts.
 
-The most useful next phase is an isolated PostgreSQL contract check plus a narrowly scoped fix for the duplicate evaluator. The current 63-test suite passes, but it tests mostly SQLite/mocked behavior and does not establish deployed database compatibility.
+The recommended Stage 0C work is an isolated PostgreSQL contract check plus a narrowly scoped fix for the duplicate evaluator and recommendation response contract. The 63-test result recorded by the 2026-11-25 audit is historical; it tested mostly SQLite/mocked behavior and does not establish current or deployed database compatibility.

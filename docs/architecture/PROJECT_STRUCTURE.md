@@ -2,13 +2,15 @@
 
 Audit date: 2026-11-25. This is a source and reference audit, not a database inspection. Counts below exclude `.git`, virtual environments, and cache directories. The worktree already contained modified and untracked files when the audit began; those files were inspected in their current state.
 
+Stage 0B subsequently populated the root `README.md` and added `ROADMAP.md`, `docs/decisions.md`, `docs/progress.md`, and `docs/benchmarks.md`. The tree and counts below remain the **2026-11-25 application audit snapshot**, not a refreshed file count.
+
 ```text
 movieverse/
 ├── .env                         # present; ignored; contents not inspected
 ├── .gitignore
 ├── .vscode/settings.json
 ├── AGENTS.md
-├── README.md                    # empty
+├── README.md                    # empty at audit; populated in Stage 0B
 ├── requirements.txt
 ├── app/
 │   ├── __init__.py

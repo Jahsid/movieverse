@@ -1,5 +1,7 @@
 # MovieVerse architecture overview
 
+> **Scope:** This document describes the source architecture observed in the 2026-11-25 audit. The approved future stage sequence is in [ROADMAP.md](../../ROADMAP.md), and Stage 0B decisions are in [docs/decisions.md](../decisions.md). Planned modules and learning labs are not implemented features.
+
 ## Executive summary
 
 MovieVerse has a working FastAPI backend and five-page Streamlit client. The live recommendation API exposes only similar movies from a KNN model trained at API startup. Content-based and hybrid recommendation code is used by offline evaluation and tests, but is not exposed through HTTP. The database is PostgreSQL in normal operation; automated tests use isolated SQLite fixtures or mocks. The current source tree contains operational scripts and manual checks alongside automated tests. No source files were changed during this audit.

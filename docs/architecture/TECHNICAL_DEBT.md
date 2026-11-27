@@ -1,8 +1,10 @@
 # Technical debt and test architecture
 
+> **Audit snapshot:** Findings and the 63-test run below are dated 2026-11-25. Stage 0B populated `README.md` and created development planning documents; no application debt or runtime behavior was changed in Stage 0B. See [progress](../progress.md) for current stage status.
+
 ## Verification performed
 
-Read-only source/reference inspection plus `.venv-watchlist\Scripts\python.exe -m pytest -p no:cacheprovider -q` on 2026-11-25: **63 passed, 0 failed, 0 skipped, 1 warning, 34.75 s**. The warning is a Starlette TestClient deprecation concerning `httpx`. This is the current executed result; the earlier 60-test figure is historical. The configured Render database, migrations, manual DB runners, API server and Streamlit server were not run. Tests do not establish production schema correctness.
+Read-only source/reference inspection plus `.venv-watchlist\Scripts\python.exe -m pytest -p no:cacheprovider -q` on 2026-11-25: **63 passed, 0 failed, 0 skipped, 1 warning, 34.75 s**. The warning is a Starlette TestClient deprecation concerning `httpx`. This is the most recent result recorded by that audit, not a Stage 0B test run; the earlier 60-test figure is historical. The configured Render database, migrations, manual DB runners, API server and Streamlit server were not run. Tests do not establish production schema correctness.
 
 ## Test files and isolation
 
@@ -34,7 +36,7 @@ The tests are safe for the configured production database **as currently collect
 | `/health` returns a static success object without checking dependencies. | A response does not prove DB/model readiness. | P1: document semantics or introduce a separate readiness endpoint later. |
 | `_genre_counts` selects all movie genres and splits them in Python; overview calls it too. | Repeated full catalogue scan for Home/Insights. | P2: benchmark, then consider database-side aggregation/caching. |
 | `hybrid_service` normalizes component scores, then `calculate_hybrid_scores` normalizes its inputs again. | Repeated CPU work; normalization intent is harder to follow. | P2: retain displayed component scores but calculate final scores once after tests. |
-| `README.md`, `app/schemas/rating.py`, and `app/utils/logger.py` are empty. | Missing project guidance; placeholder files create ambiguity. | P2/P3: fill README; investigate placeholder external use before removal. |
+| At audit time, `README.md`, `app/schemas/rating.py`, and `app/utils/logger.py` were empty. Stage 0B populated `README.md`; the placeholders remain. | Placeholder files create ambiguity. | P3: investigate placeholder external use before removal. |
 | Root manual `test_*.py` scripts do work at import time and are collected by pytest despite having no test functions. | Slower collection and noisy test semantics. | P2: move/rename or convert to isolated assertions after updating commands. |
 | `load_data.py` uses `create_all`, while a separate SQL migration handles watchlist evolution. | `create_all` will not reconcile existing tables. | P0 operational: audit deployed schema before changing it; maintain migrations. |
 
@@ -61,7 +63,7 @@ The tests are safe for the configured production database **as currently collect
 |---|---|---|---|---|
 | `app/schemas/rating.py` | Empty placeholder | No source reference found | No contract | Potential removal only after external import check |
 | `app/utils/logger.py` and `app/utils/__init__.py` | Empty utility package | No application import found | No logging implementation | Investigate external use, then consider removal of placeholder package |
-| `README.md` | Empty | Repository root convention only | No setup/readme guidance | Fill, not delete |
+| `README.md` | Populated in Stage 0B | Repository entry point | Keep setup and architecture links current | Maintain, not delete |
 | `app/recommender/model.py` duplicate evaluator | Offline metric helper | No caller found; separate active evaluator in `evaluation.py` | Broken missing symbol and duplicate logic | Repair or remove function after tests |
 | `test_hybrid.py` | Import-time arithmetic assertions | Collected by pytest; overlaps `tests/test_recommender_quality.py` | Redundant/manual test shape | Fold unique cases into tests, then consider removal |
 | `tests/test_recommendations.py` | Manual DB KNN smoke | Guarded script, no pytest cases | Misnamed inside tests | Move to manual checks after command update |
