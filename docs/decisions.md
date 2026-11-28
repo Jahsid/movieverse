@@ -78,3 +78,7 @@ Store successful metadata in the dataset transaction. Sample elapsed millisecond
 ## Stage 1G-F loader gate
 
 Resolve the single head through the repository Alembic configuration and validate the ledger and frozen public-schema contract before opening input files. Checking the version string alone would miss drift. Keep provisioning and stamping outside the loader. Future schema revisions must supply their corresponding verification contract.
+
+## Stage 1H batch benchmark and default
+
+The guarded local matrix measured three dataset sizes, batch sizes 250/1,000/2,000, three ingestion scenarios and three repetitions on Windows 11 with Python 3.12.0. Retain the existing 1,000-row normal default. It was the best balanced result, especially on full initial ingestion and identical replay, while 2,000 had no consistent speed gain and the highest process peak. Replay performance varied by dataset and scenario, so this is a local recommendation only; no application default change is approved. Full measurements and method: [Stage 1H-E analysis](benchmarks.md#stage-1h-e-complete-three-repetition-matrix).
