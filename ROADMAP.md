@@ -60,9 +60,11 @@ This is the approved **sequence and learning scope**, not a claim that future fe
 
 ## Stage 2 — Advanced Data Engineering learning lab
 
+**Progress:** Stage 2A (Parquet and DuckDB) is complete as an isolated learning experiment. Stage 2B (dbt) is the proposed next phase and requires approval before installation or implementation. See the [Stage 2A learning checkpoint](docs/learning/stage2a_checkpoint.md) and [Stage 2 assessment](docs/stage2_advanced_data_engineering.md).
+
 - **Objective:** Demonstrate orchestration, streaming, distributed processing, transformations, and columnar storage without burdening the core app.
 - **Learn:** Airflow DAGs, Kafka events/consumer offsets, PySpark partitions, dbt models/tests, and Parquet layout. Compare each with the simple batch pipeline.
-- **Features/work:** A proposed sequence begins with typed Parquet and DuckDB analysis, then dbt SQL models/tests, a local Airflow DAG, a bounded Kafka event/replay lab, and a PySpark comparison. Keep each tool in an isolated experiment; full scope, current installation constraints, alternatives and approval gates are in [the Stage 2 assessment](docs/stage2_advanced_data_engineering.md).
+- **Features/work:** Stage 2A delivered typed Parquet conversion, integrity checks, equivalent DuckDB analytics, query-plan inspection and a measured local comparison. Proposed next is dbt SQL models/tests, followed by a local Airflow DAG, a bounded Kafka event/replay lab, and a PySpark comparison. Keep each tool in an isolated experiment; scope, constraints, alternatives and approval gates are in [the Stage 2 assessment](docs/stage2_advanced_data_engineering.md).
 - **Tools/frameworks:** Apache Airflow, Kafka, PySpark, dbt, Parquet, optional DuckDB. **Free alternatives:** Windows Task Scheduler/cron concept, Python queue or file log, pandas, SQL views, CSV. Use Colab or limited containers only if local RAM permits.
 - **Dependencies:** Stage 1 contracts and stable sample data. **Expected file changes:** `experiments/data_engineering/` or `notebooks/`, optional `data/processed/` outputs ignored by Git, lab-specific dependency file, tests and docs; no serving path changes by default.
 - **Acceptance criteria:** Each approved lab is independently runnable, has a bounded dataset and cleanup instructions, compares behavior/resources with the simple pipeline, and does not require any of these tools for API startup. Approve each phase before implementation.

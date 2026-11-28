@@ -23,6 +23,7 @@ Content-based and hybrid recommendations are **not** live API features. There is
 | `frontend/` | Streamlit UI and HTTP client |
 | `data/raw/`, `migrations/`, `scripts/` | Inputs, schema repair, and operational checks |
 | `tests/` and root `test_*.py` | Automated tests and some manual checks |
+| `experiments/data_engineering/parquet_duckdb/` | Isolated CSV/Parquet conversion, DuckDB analytics, and reproducible performance experiments; see its README and [Stage 2A learning checkpoint](docs/learning/stage2a_checkpoint.md) |
 
 Generate and inspect raw-file metadata without a database connection:
 
