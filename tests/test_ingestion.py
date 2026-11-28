@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 from app.data_pipeline.extractor import extract_movies, extract_ratings
 from app.data_pipeline.transformer import transform_movies, transform_ratings
 from app.data_pipeline.validator import validate_movies, validate_ratings
-from app.database.models import IngestionJob, Movie
+from app.database.models import IngestionJob, Movie, Rating, User
 from app.services import ingestion_service
 
 
@@ -104,15 +104,156 @@ def test_postgres_insert_conflict_is_idempotent_by_returned_rows():
     assert ingestion_service.insert_in_batches(db, Movie, records) == 0
 
 
-def test_ingestion_rollback_on_failure(database, movie_frame, rating_frame, monkeypatch):
-    def fail_on_ratings(db, model, records):
-        if model.__tablename__ == "ratings":
-            raise RuntimeError("test failure")
-        return len(records)
+def test_ingestion_rollback_on_failure(database, movie_frame, rating_frame, monkeypatch, caplog):
+    insert_batch = ingestion_service.upsert_in_batches
 
-    monkeypatch.setattr(ingestion_service, "insert_in_batches", fail_on_ratings)
-    with pytest.raises(RuntimeError, match="test failure"):
+    def fail_on_ratings(db, model, records, fields):
+        if model is Rating:
+            assert db.get(User, 1) and db.get(Movie, 1)
+            raise RuntimeError("private row value")
+        return insert_batch(db, model, records, fields)
+
+    monkeypatch.setattr(ingestion_service, "upsert_in_batches", fail_on_ratings)
+    with pytest.raises(RuntimeError):
         ingestion_service.load_movie_data(database, transform_movies(movie_frame),
                                           transform_ratings(rating_frame))
     assert database.in_transaction() is False
-    assert database.scalar(select(IngestionJob.id)) is None
+    job = database.scalars(select(IngestionJob)).one()
+    assert (job.status, job.total_records, job.imported_records) == ("failed", 2, 0)
+    assert database.get(Movie, 1) is None and database.get(User, 1) is None
+    assert "insertion (RuntimeError)" in caplog.text
+    assert "private row value" not in caplog.text
+
+
+def test_file_load_and_partial_duplicate(database, tmp_path, movie_frame, rating_frame):
+    movies, ratings = tmp_path / "movies.csv", tmp_path / "ratings.csv"
+    movie_frame.to_csv(movies, index=False)
+    rating_frame.to_csv(ratings, index=False)
+    first = ingestion_service.load_movie_files(database, movies, ratings)
+    assert (first["processed_records"], first["inserted_records"], first["users_inserted"]) == (2, 2, 1)
+    assert first["skipped_records"] == 0 and first["elapsed_seconds"] >= 0
+    pd.concat([movie_frame, movie_frame.assign(movieId=2)]).to_csv(movies, index=False)
+    second = ingestion_service.load_movie_files(database, movies, ratings)
+    assert (second["processed_records"], second["inserted_records"], second["skipped_records"]) == (3, 1, 2)
+    assert second["users_skipped"] == 1
+    job = database.get(IngestionJob, second["job_id"])
+    assert (job.status, job.total_records, job.imported_records, job.rejected_records) == ("completed", 3, 1, 0)
+
+
+def test_orphan_fails_before_inserts(database, movie_frame, rating_frame, monkeypatch):
+    def unexpected_insert(*args):
+        pytest.fail("Validation must precede all dataset inserts")
+
+    monkeypatch.setattr(ingestion_service, "insert_in_batches", unexpected_insert)
+    with pytest.raises(ValueError, match="absent"):
+        ingestion_service.load_movie_data(database, transform_movies(movie_frame),
+                                          transform_ratings(rating_frame.assign(movieId=2)))
+    assert database.scalars(select(IngestionJob.status)).one() == "failed"
+
+
+def test_extraction_failure_records_started_job(database, tmp_path, monkeypatch, caplog):
+    movies = tmp_path / "movies.csv"
+    movies.write_bytes(b"title")
+    def fail_read(path):
+        assert database.scalars(select(IngestionJob.status)).one() == "processing"
+        raise OSError("private filename")
+
+    monkeypatch.setattr(ingestion_service, "extract_movies", fail_read)
+    with pytest.raises(OSError):
+        ingestion_service.load_movie_files(database, movies, "ratings.csv")
+    job = database.scalars(select(IngestionJob)).one()
+    assert (job.status, job.total_records, job.imported_records) == ("failed", 0, 0)
+    assert "extraction (OSError)" in caplog.text
+    assert "private filename" not in caplog.text
+
+
+def test_lost_commit_acknowledgement_preserves_completed_job(
+    database, movie_frame, rating_frame, monkeypatch
+):
+    commit = database.commit
+
+    def commit_then_disconnect():
+        completed = any(isinstance(row, IngestionJob) and row.status == "completed"
+                        for row in database.dirty)
+        commit()
+        if completed:
+            raise ConnectionError("lost acknowledgement")
+
+    monkeypatch.setattr(database, "commit", commit_then_disconnect)
+    with pytest.raises(ConnectionError):
+        ingestion_service.load_movie_data(database, transform_movies(movie_frame),
+                                          transform_ratings(rating_frame))
+    job = database.scalars(select(IngestionJob)).one()
+    assert (job.status, job.imported_records) == ("completed", 2)
+    assert database.scalar(select(Rating.rating)) == 4.5
+
+
+def test_incremental_file_counts_and_fingerprint(database, tmp_path, movie_frame, rating_frame):
+    from app.data_pipeline.manifest import generate_manifest
+
+    movies, ratings = tmp_path / "movies.csv", tmp_path / "ratings.csv"
+    pd.concat([movie_frame, movie_frame.assign(movieId=9)]).to_csv(movies, index=False)
+    rating_frame.to_csv(ratings, index=False)
+    first = ingestion_service.load_movie_files(database, movies, ratings)
+    assert first["content_fingerprint"] == generate_manifest(tmp_path)["content_fingerprint"]
+    assert first["source_changed"] is None
+    database.get(User, 1).username = "existing-profile"
+    database.commit()
+
+    # Omit movie 9, correct movie 1 (including a now-null year), add movie 2.
+    pd.concat([movie_frame.assign(title="Corrected"), movie_frame.assign(movieId=2)]).to_csv(
+        movies, index=False
+    )
+    rating_frame.assign(rating=3.0, timestamp=5).to_csv(ratings, index=False)
+    changed = ingestion_service.load_movie_files(
+        database, movies, ratings, previous_fingerprint=first["content_fingerprint"]
+    )
+    assert changed["source_changed"] is True
+    assert (changed["inserted_records"], changed["updated_records"], changed["unchanged_records"]) == (1, 2, 0)
+    assert (changed["movies_updated"], changed["ratings_updated"]) == (1, 1)
+    assert database.get(Movie, 1).release_year is None
+    assert database.get(Movie, 9) and database.get(User, 1).username == "existing-profile"
+    assert database.get(Rating, (1, 1)).timestamp == 5
+
+    def repeat():
+        return ingestion_service.load_movie_files(
+            database, movies, ratings, previous_fingerprint=changed["content_fingerprint"]
+        )
+
+    identical = repeat()
+    assert identical["source_changed"] is False
+    assert (identical["inserted_records"], identical["updated_records"], identical["unchanged_records"]) == (0, 0, 3)
+    database.get(Rating, (1, 1)).rating = 1.0
+    database.commit()
+    repaired = repeat()
+    assert repaired["source_changed"] is False and repaired["ratings_updated"] == 1
+    assert database.get(Rating, (1, 1)).rating == 3.0
+
+
+def test_duplicate_batch_preserves_existing_movie(database, movie_frame, rating_frame):
+    def load(movies, ratings):
+        return ingestion_service.load_movie_data(database, transform_movies(movies), transform_ratings(ratings))
+
+    load(movie_frame, rating_frame)
+    with pytest.raises(ValueError, match="Duplicate"):
+        load(movie_frame.assign(title="Correction"), pd.concat([rating_frame, rating_frame]))
+    assert database.get(Movie, 1).title == "Film (2001)"
+    assert database.scalars(select(IngestionJob.status).order_by(IngestionJob.id)).all() == ["completed", "failed"]
+
+
+def test_rating_write_failure_rolls_back_movie_update(database, movie_frame, rating_frame, monkeypatch):
+    movies, ratings = transform_movies(movie_frame), transform_ratings(rating_frame)
+    ingestion_service.load_movie_data(database, movies, ratings)
+    real_upsert = ingestion_service.upsert_in_batches
+
+    def fail_after_movie(db, model, records, fields):
+        if model is Rating:
+            assert db.scalar(select(Movie.title)) == "Correction"
+            raise RuntimeError("rating write failed")
+        return real_upsert(db, model, records, fields)
+
+    monkeypatch.setattr(ingestion_service, "upsert_in_batches", fail_after_movie)
+    with pytest.raises(RuntimeError, match="rating write failed"):
+        ingestion_service.load_movie_data(database, movies.assign(title="Correction"), ratings)
+    assert database.get(Movie, 1).title == "Film (2001)"
+    assert database.scalars(select(IngestionJob.status).order_by(IngestionJob.id)).all() == ["completed", "failed"]

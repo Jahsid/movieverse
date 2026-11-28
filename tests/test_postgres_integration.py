@@ -2,6 +2,7 @@
 
 import os
 
+import pandas as pd
 import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
@@ -9,8 +10,10 @@ from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from app.data_pipeline.transformer import transform_movies, transform_ratings
+from app.services.ingestion_service import load_movie_data
 from app.database.connection import Base
-from app.database.models import Movie, User, Watchlist
+from app.database.models import Movie, Rating, User, Watchlist
 
 
 TEST_DATABASE = "movieverse_itest"
@@ -106,6 +109,26 @@ def test_local_postgres_schema_and_transactions():
             session.flush()
             session.rollback()
             assert session.get(Movie, 2) is None
+
+            movies = transform_movies(pd.DataFrame([
+                {"movieId": 2, "title": "Ingested (2001)", "genres": "Drama"},
+            ]))
+            ratings = transform_ratings(pd.DataFrame([
+                {"movieId": 2, "userId": 1, "rating": 4.5, "timestamp": 10},
+            ]))
+            first = load_movie_data(session, movies, ratings)
+            retry = load_movie_data(session, movies, ratings)
+            assert (first["inserted_records"], first["users_skipped"]) == (2, 1)
+            assert (retry["inserted_records"], retry["skipped_records"]) == (0, 2)
+            movies = movies.assign(title="Correction", release_year=None)
+            ratings = ratings.assign(rating=2.5, timestamp=11)
+            changed = load_movie_data(session, movies, ratings)
+            assert (changed["inserted_records"], changed["updated_records"], changed["unchanged_records"]) == (0, 2, 0)
+            assert session.get(Movie, 2).release_year is None
+            assert session.get(Rating, (1, 2)).rating == 2.5
+            assert session.get(Movie, 1).title == "Integration test movie"
+            repeat = load_movie_data(session, movies, ratings)
+            assert (repeat["inserted_records"], repeat["updated_records"], repeat["unchanged_records"]) == (0, 0, 2)
     finally:
         if created:
             with engine.begin() as connection:
