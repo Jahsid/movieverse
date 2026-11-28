@@ -1,5 +1,6 @@
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     Integer,
     String,
@@ -11,7 +12,7 @@ from sqlalchemy import (
 
 from sqlalchemy.sql import func
 
-from app.database.connection import Base
+from app.database.base import Base
 
 
 class Movie(Base):
@@ -93,3 +94,12 @@ class IngestionJob(Base):
     rejected_records = Column(Integer, default=0)
 
     created_at = Column(DateTime, server_default=func.now())
+
+    content_fingerprint = Column(String(64), nullable=True)
+    updated_records = Column(Integer, nullable=True)
+    unchanged_records = Column(Integer, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(BigInteger, nullable=True)
+    failure_phase = Column(String(32), nullable=True)
+    failure_code = Column(String(64), nullable=True)

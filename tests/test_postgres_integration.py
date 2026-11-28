@@ -5,55 +5,15 @@ import os
 import pandas as pd
 import pytest
 from sqlalchemy import create_engine, select, text
-from sqlalchemy.engine import make_url
-from sqlalchemy.exc import ArgumentError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from app.data_pipeline.transformer import transform_movies, transform_ratings
 from app.services.ingestion_service import load_movie_data
+from scripts.local_postgres_guard import checked_url, verify_identity
 from app.database.connection import Base
 from app.database.models import Movie, Rating, User, Watchlist
-
-
-TEST_DATABASE = "movieverse_itest"
-TEST_ROLE = "movieverse_itest"
-
-
-def _checked_url(raw_url):
-    """Reject every target except the dedicated loopback database and role."""
-    try:
-        url = make_url(raw_url)
-        allowed = (
-            url.drivername == "postgresql+psycopg"
-            and url.host == "127.0.0.1"
-            and url.port == 5432
-            and url.database == TEST_DATABASE
-            and url.username == TEST_ROLE
-            and bool(url.password)
-            and not url.query
-        )
-    except (ArgumentError, AttributeError, TypeError, ValueError):
-        allowed = False
-    if not allowed:
-        raise ValueError("Integration target must be the dedicated local movieverse_itest database and role")
-    return url
-
-
-def _verify_identity(connection):
-    row = connection.execute(text(
-        "SELECT current_database(), current_user, host(inet_server_addr()), "
-        "inet_server_port()"
-    )).one()
-    if tuple(row) != (TEST_DATABASE, TEST_ROLE, "127.0.0.1", 5432):
-        raise RuntimeError("Connected PostgreSQL identity does not match the local test target")
-
-    privileges = connection.execute(text(
-        "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls "
-        "FROM pg_roles WHERE rolname = current_user"
-    )).one()
-    if any(privileges):
-        raise RuntimeError("Integration login has privileged role attributes")
 
 
 @pytest.mark.parametrize("url", [
@@ -64,7 +24,7 @@ def _verify_identity(connection):
 ])
 def test_reject_unsafe_integration_target(url):
     with pytest.raises(ValueError, match="dedicated local"):
-        _checked_url(url)
+        checked_url(url)
 
 
 def test_local_postgres_schema_and_transactions():
@@ -74,12 +34,12 @@ def test_local_postgres_schema_and_transactions():
     raw_url = os.environ.get("MOVIEVERSE_TEST_DATABASE_URL")
     if not raw_url:
         pytest.fail("Set MOVIEVERSE_TEST_DATABASE_URL independently of DATABASE_URL")
-    url = _checked_url(raw_url)
+    url = checked_url(raw_url)
     engine = create_engine(url, poolclass=NullPool, connect_args={"connect_timeout": 3})
     created = False
     try:
         with engine.connect() as connection:
-            _verify_identity(connection)  # No DDL or DML occurs before this check.
+            verify_identity(connection)  # No DDL or DML occurs before this check.
             existing = connection.scalar(text(
                 "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')"
@@ -88,12 +48,12 @@ def test_local_postgres_schema_and_transactions():
                 pytest.fail("The test database public schema is not empty; refusing to alter it")
 
         with engine.begin() as connection:
-            _verify_identity(connection)
+            verify_identity(connection)
             Base.metadata.create_all(connection)
             created = True
 
         with Session(engine) as session:
-            _verify_identity(session.connection())
+            verify_identity(session.connection())
             session.add_all([
                 User(user_id=1), Movie(movie_id=1, title="Integration test movie"),
                 Watchlist(user_id=1, movie_id=1, status="PLANNED"),
@@ -132,6 +92,6 @@ def test_local_postgres_schema_and_transactions():
     finally:
         if created:
             with engine.begin() as connection:
-                _verify_identity(connection)
+                verify_identity(connection)
                 Base.metadata.drop_all(connection)
         engine.dispose()

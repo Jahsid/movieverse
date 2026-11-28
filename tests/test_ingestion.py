@@ -120,6 +120,8 @@ def test_ingestion_rollback_on_failure(database, movie_frame, rating_frame, monk
     assert database.in_transaction() is False
     job = database.scalars(select(IngestionJob)).one()
     assert (job.status, job.total_records, job.imported_records) == ("failed", 2, 0)
+    assert (job.failure_phase, job.failure_code) == ("insertion", "dataset_write_failed")
+    assert (job.updated_records, job.unchanged_records, job.content_fingerprint) == (0, 0, None)
     assert database.get(Movie, 1) is None and database.get(User, 1) is None
     assert "insertion (RuntimeError)" in caplog.text
     assert "private row value" not in caplog.text
@@ -163,6 +165,8 @@ def test_extraction_failure_records_started_job(database, tmp_path, monkeypatch,
         ingestion_service.load_movie_files(database, movies, "ratings.csv")
     job = database.scalars(select(IngestionJob)).one()
     assert (job.status, job.total_records, job.imported_records) == ("failed", 0, 0)
+    assert job.started_at and job.completed_at and job.duration_ms >= 0
+    assert (job.failure_phase, job.failure_code, job.content_fingerprint) == ("extraction", "source_read_failed", None)
     assert "extraction (OSError)" in caplog.text
     assert "private filename" not in caplog.text
 
@@ -185,6 +189,9 @@ def test_lost_commit_acknowledgement_preserves_completed_job(
                                           transform_ratings(rating_frame))
     job = database.scalars(select(IngestionJob)).one()
     assert (job.status, job.imported_records) == ("completed", 2)
+    assert (job.failure_phase, job.failure_code, job.content_fingerprint) == (None, None, None)
+    assert (job.updated_records, job.unchanged_records) == (0, 0)
+    assert job.started_at and job.completed_at and job.duration_ms >= 0
     assert database.scalar(select(Rating.rating)) == 4.5
 
 
@@ -226,6 +233,15 @@ def test_incremental_file_counts_and_fingerprint(database, tmp_path, movie_frame
     database.get(Rating, (1, 1)).rating = 1.0
     database.commit()
     repaired = repeat()
+    for result in (first, changed, identical, repaired):
+        job = database.get(IngestionJob, result["job_id"])
+        assert job.content_fingerprint == result["content_fingerprint"]
+        assert (job.imported_records, job.updated_records, job.unchanged_records) == (
+            result["inserted_records"], result["updated_records"], result["unchanged_records"]
+        )
+        assert job.total_records == job.imported_records + job.updated_records + job.unchanged_records
+        assert job.started_at and job.completed_at and 0 <= job.duration_ms <= result["elapsed_seconds"] * 1000
+        assert job.failure_phase is None and job.failure_code is None
     assert repaired["source_changed"] is False and repaired["ratings_updated"] == 1
     assert database.get(Rating, (1, 1)).rating == 3.0
 
@@ -257,3 +273,17 @@ def test_rating_write_failure_rolls_back_movie_update(database, movie_frame, rat
         ingestion_service.load_movie_data(database, movies.assign(title="Correction"), ratings)
     assert database.get(Movie, 1).title == "Film (2001)"
     assert database.scalars(select(IngestionJob.status).order_by(IngestionJob.id)).all() == ["completed", "failed"]
+
+
+def test_file_validation_failure_persists_known_fingerprint(database, tmp_path, movie_frame, rating_frame):
+    from app.data_pipeline.manifest import generate_manifest
+
+    movies, ratings = tmp_path / "movies.csv", tmp_path / "ratings.csv"
+    movie_frame.to_csv(movies, index=False)
+    rating_frame.assign(movieId=99).to_csv(ratings, index=False)
+    with pytest.raises(ValueError, match="absent"):
+        ingestion_service.load_movie_files(database, movies, ratings)
+    job = database.scalars(select(IngestionJob)).one()
+    assert job.content_fingerprint == generate_manifest(tmp_path)["content_fingerprint"]
+    assert (job.failure_phase, job.failure_code) == ("validation", "invalid_input")
+    assert (job.total_records, job.imported_records, job.updated_records, job.unchanged_records) == (2, 0, 0, 0)

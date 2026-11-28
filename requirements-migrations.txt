@@ -1,0 +1,2 @@
+-c constraints-tested-py312-win.txt
+alembic==1.20.1

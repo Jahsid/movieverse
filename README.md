@@ -52,7 +52,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Set `DATABASE_URL` in a local `.env` to a PostgreSQL connection string for the isolated database. `.env` is ignored by Git. Confirm the target before any write. The loader creates missing tables and imports `data/raw/movies.csv` and `data/raw/ratings.csv`; `create_all` does **not** migrate existing tables.
+Set `DATABASE_URL` in a local `.env` to a PostgreSQL connection string for the isolated database. `.env` is ignored by Git. Confirm the target before any write. The loader needs the existing Alembic tooling (`pip install -r requirements-migrations.txt`). Before importing either CSV it verifies the target's public schema and ledger against the configured migration head. Empty, unversioned or incompatible databases require separate migration review. See the [migration runbook](migrations/README.md).
 
 ```powershell
 python load_data.py
@@ -88,4 +88,6 @@ The project targets zero additional expenditure and a Windows Intel i3/8 GB deve
 
 ### Ingestion job results
 
-After table initialization, `python load_data.py` tracks extraction through commit. A successful run reports processed, inserted, updated, and unchanged movie and rating rows, separate derived-user counts, the manifest-compatible content fingerprint, and elapsed seconds. Failures exit with status 1. Use the job ID in the failure log to look up the attempt. See [ingestion job semantics](docs/architecture/ARCHITECTURE_OVERVIEW.md#ingestion-job-lifecycle).
+After schema verification, `python load_data.py` tracks extraction through commit. A successful run reports processed, inserted, updated, and unchanged movie and rating rows, separate derived-user counts, the manifest-compatible content fingerprint, and elapsed seconds. Failures exit with status 1. Use the job ID to look up persisted counts, UTC timing, file fingerprint when available, and the failure phase and code. See [ingestion job semantics](docs/architecture/ARCHITECTURE_OVERVIEW.md#ingestion-job-lifecycle).
+
+For migration dependency setup, offline PostgreSQL SQL previews and the guarded local baseline test, see the [migration runbook](migrations/README.md).

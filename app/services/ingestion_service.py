@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from time import perf_counter
@@ -16,6 +17,13 @@ from app.database.models import Movie, User, Rating, IngestionJob
 
 
 BATCH_SIZE = 1000
+FAILURE_CODES = {
+    "extraction": "source_read_failed",
+    "validation": "invalid_input",
+    "transformation": "transform_failed",
+    "insertion": "dataset_write_failed",
+    "commit": "commit_failed",
+}
 
 
 def insert_in_batches(db, model, records):
@@ -82,9 +90,8 @@ def load_movie_files(db, movie_path, rating_path, *, previous_fingerprint=None):
     def read_frames():
         return extract(movie_path, extract_movies), extract(rating_path, extract_ratings)
 
-    result = _run_job(db, read_frames, transform=True)
-    fingerprint = content_fingerprint(files)
-    result["content_fingerprint"] = fingerprint
+    result = _run_job(db, read_frames, transform=True, files=files)
+    fingerprint = result["content_fingerprint"]
     result["source_changed"] = None if previous_fingerprint is None else fingerprint != previous_fingerprint
     return result
 
@@ -94,9 +101,9 @@ def load_movie_data(db, movies, ratings):
     return _run_job(db, lambda: (movies, ratings), transform=False)
 
 
-def _run_job(db, read_frames, transform):
+def _run_job(db, read_frames, transform, files=None):
     started = perf_counter()
-    job = IngestionJob(filename="movielens_latest_small", status="processing")
+    job = IngestionJob(filename="movielens_latest_small", status="processing", started_at=datetime.now(UTC))
     try:
         db.add(job)
         db.flush()
@@ -106,10 +113,16 @@ def _run_job(db, read_frames, transform):
         db.rollback()
         raise
 
+    fingerprint = None
     total = 0
     phase = "extraction"
     try:
-        movies, ratings = read_frames()
+        try:
+            movies, ratings = read_frames()
+        finally:
+            # Both hashes can exist even if parsing the second file fails.
+            if files is not None and len(files) == 2:
+                fingerprint = content_fingerprint(files)
         total = len(movies) + len(ratings)
         phase = "validation"
         validate_movies(movies)
@@ -175,6 +188,11 @@ def _run_job(db, read_frames, transform):
         job.total_records = total
         job.imported_records = inserted
         job.rejected_records = 0
+        job.updated_records = updated
+        job.unchanged_records = unchanged
+        job.content_fingerprint = fingerprint
+        job.completed_at = datetime.now(UTC)
+        job.duration_ms = int((perf_counter() - started) * 1000)
         phase = "commit"
         db.commit()
     except Exception as error:
@@ -187,12 +205,17 @@ def _run_job(db, read_frames, transform):
         db.execute(
             update(IngestionJob)
             .where(IngestionJob.id == job_id, IngestionJob.status == "processing")
-            .values(status="failed", total_records=total)
+            .values(
+                status="failed", total_records=total, imported_records=0,
+                updated_records=0, unchanged_records=0, content_fingerprint=fingerprint,
+                completed_at=datetime.now(UTC), duration_ms=int((perf_counter() - started) * 1000),
+                failure_phase=phase, failure_code=FAILURE_CODES[phase],
+            )
         )
         db.commit()
         raise
 
-    return {
+    result = {
         "status": "success",
         "job_id": job_id,
         "processed_records": total,
@@ -208,3 +231,6 @@ def _run_job(db, read_frames, transform):
         "ratings_inserted": ratings_inserted,
         "elapsed_seconds": perf_counter() - started,
     }
+    if files is not None:
+        result["content_fingerprint"] = fingerprint
+    return result
