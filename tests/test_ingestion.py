@@ -107,11 +107,11 @@ def test_postgres_insert_conflict_is_idempotent_by_returned_rows():
 def test_ingestion_rollback_on_failure(database, movie_frame, rating_frame, monkeypatch, caplog):
     insert_batch = ingestion_service.upsert_in_batches
 
-    def fail_on_ratings(db, model, records, fields):
+    def fail_on_ratings(db, model, records, fields, batch_size=ingestion_service.BATCH_SIZE):
         if model is Rating:
             assert db.get(User, 1) and db.get(Movie, 1)
             raise RuntimeError("private row value")
-        return insert_batch(db, model, records, fields)
+        return insert_batch(db, model, records, fields, batch_size)
 
     monkeypatch.setattr(ingestion_service, "upsert_in_batches", fail_on_ratings)
     with pytest.raises(RuntimeError):
@@ -140,6 +140,45 @@ def test_file_load_and_partial_duplicate(database, tmp_path, movie_frame, rating
     assert second["users_skipped"] == 1
     job = database.get(IngestionJob, second["job_id"])
     assert (job.status, job.total_records, job.imported_records, job.rejected_records) == ("completed", 3, 1, 0)
+
+
+def test_ingestion_batch_size_defaults_to_1000(database, movie_frame, rating_frame, monkeypatch):
+    observed = []
+    insert_batch = ingestion_service.insert_in_batches
+    upsert_batch = ingestion_service.upsert_in_batches
+
+    def record_insert(db, model, records, batch_size=ingestion_service.BATCH_SIZE):
+        observed.append(batch_size)
+        return insert_batch(db, model, records, batch_size)
+
+    def record_upsert(db, model, records, fields, batch_size=ingestion_service.BATCH_SIZE):
+        observed.append(batch_size)
+        return upsert_batch(db, model, records, fields, batch_size)
+
+    monkeypatch.setattr(ingestion_service, "insert_in_batches", record_insert)
+    monkeypatch.setattr(ingestion_service, "upsert_in_batches", record_upsert)
+    ingestion_service.load_movie_data(database, transform_movies(movie_frame),
+                                      transform_ratings(rating_frame))
+    assert observed == [1000, 1000, 1000]
+
+
+@pytest.mark.parametrize("batch_size", [250, 1000, 2000])
+def test_ingestion_accepts_benchmark_batch_sizes(database, movie_frame, rating_frame, batch_size):
+    result = ingestion_service.load_movie_data(
+        database, transform_movies(movie_frame), transform_ratings(rating_frame),
+        batch_size=batch_size,
+    )
+    assert result["inserted_records"] == 2
+    assert result["updated_records"] == 0
+    assert result["unchanged_records"] == 0
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, 1.5, True, "250", None])
+def test_ingestion_rejects_invalid_batch_size(database, movie_frame, rating_frame, batch_size):
+    with pytest.raises(ValueError, match="positive integer"):
+        ingestion_service.load_movie_data(database, transform_movies(movie_frame),
+                                          transform_ratings(rating_frame), batch_size=batch_size)
+    assert database.scalars(select(IngestionJob)).all() == []
 
 
 def test_orphan_fails_before_inserts(database, movie_frame, rating_frame, monkeypatch):
@@ -262,11 +301,11 @@ def test_rating_write_failure_rolls_back_movie_update(database, movie_frame, rat
     ingestion_service.load_movie_data(database, movies, ratings)
     real_upsert = ingestion_service.upsert_in_batches
 
-    def fail_after_movie(db, model, records, fields):
+    def fail_after_movie(db, model, records, fields, batch_size=ingestion_service.BATCH_SIZE):
         if model is Rating:
             assert db.scalar(select(Movie.title)) == "Correction"
             raise RuntimeError("rating write failed")
-        return real_upsert(db, model, records, fields)
+        return real_upsert(db, model, records, fields, batch_size)
 
     monkeypatch.setattr(ingestion_service, "upsert_in_batches", fail_after_movie)
     with pytest.raises(RuntimeError, match="rating write failed"):

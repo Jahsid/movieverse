@@ -26,14 +26,14 @@ FAILURE_CODES = {
 }
 
 
-def insert_in_batches(db, model, records):
+def insert_in_batches(db, model, records, batch_size=BATCH_SIZE):
     """Insert records in batches and count actual inserted rows."""
 
     inserted_count = 0
 
-    for start in range(0, len(records), BATCH_SIZE):
+    for start in range(0, len(records), batch_size):
 
-        batch = records[start:start + BATCH_SIZE]
+        batch = records[start:start + batch_size]
 
         statement = (
             insert(model)
@@ -50,13 +50,13 @@ def insert_in_batches(db, model, records):
     return inserted_count
 
 
-def upsert_in_batches(db, model, records, fields):
+def upsert_in_batches(db, model, records, fields, batch_size=BATCH_SIZE):
     keys = list(model.__table__.primary_key.columns)
     inserted = updated = 0
     # Consistent lock order across concurrent ingestion jobs.
     ordered = sorted(records, key=lambda row: tuple(row[key.name] for key in keys))
-    for start in range(0, len(ordered), BATCH_SIZE):
-        batch = ordered[start:start + BATCH_SIZE]
+    for start in range(0, len(ordered), batch_size):
+        batch = ordered[start:start + batch_size]
         stmt = insert(model).values(batch)
         # WHERE false locks conflicting rows without rewriting them. RETURNING
         # therefore identifies inserts, and locked keys cannot disappear below.
@@ -78,7 +78,8 @@ def upsert_in_batches(db, model, records, fields):
     return inserted, updated
 
 
-def load_movie_files(db, movie_path, rating_path, *, previous_fingerprint=None):
+def load_movie_files(db, movie_path, rating_path, *, previous_fingerprint=None,
+                     batch_size=BATCH_SIZE):
     files = []
 
     def extract(path, reader):
@@ -90,18 +91,20 @@ def load_movie_files(db, movie_path, rating_path, *, previous_fingerprint=None):
     def read_frames():
         return extract(movie_path, extract_movies), extract(rating_path, extract_ratings)
 
-    result = _run_job(db, read_frames, transform=True, files=files)
+    result = _run_job(db, read_frames, transform=True, files=files, batch_size=batch_size)
     fingerprint = result["content_fingerprint"]
     result["source_changed"] = None if previous_fingerprint is None else fingerprint != previous_fingerprint
     return result
 
 
-def load_movie_data(db, movies, ratings):
+def load_movie_data(db, movies, ratings, *, batch_size=BATCH_SIZE):
     """Load prepared frames using a dedicated ingestion session."""
-    return _run_job(db, lambda: (movies, ratings), transform=False)
+    return _run_job(db, lambda: (movies, ratings), transform=False, batch_size=batch_size)
 
 
-def _run_job(db, read_frames, transform, files=None):
+def _run_job(db, read_frames, transform, files=None, batch_size=BATCH_SIZE):
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer")
     started = perf_counter()
     job = IngestionJob(filename="movielens_latest_small", status="processing", started_at=datetime.now(UTC))
     try:
@@ -171,14 +174,14 @@ def _run_job(db, read_frames, transform, files=None):
         phase = "insertion"
         # Insert parent records before dependent records.
         users_inserted = insert_in_batches(
-            db, User, user_records
+            db, User, user_records, batch_size
         )
 
         movies_inserted, movies_updated = upsert_in_batches(
-            db, Movie, movie_records, ("title", "genres", "release_year")
+            db, Movie, movie_records, ("title", "genres", "release_year"), batch_size
         )
         ratings_inserted, ratings_updated = upsert_in_batches(
-            db, Rating, rating_records, ("rating", "timestamp")
+            db, Rating, rating_records, ("rating", "timestamp"), batch_size
         )
 
         job.status = "completed"
