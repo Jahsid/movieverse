@@ -82,3 +82,22 @@ Resolve the single head through the repository Alembic configuration and validat
 ## Stage 1H batch benchmark and default
 
 The guarded local matrix measured three dataset sizes, batch sizes 250/1,000/2,000, three ingestion scenarios and three repetitions on Windows 11 with Python 3.12.0. Retain the existing 1,000-row normal default. It was the best balanced result, especially on full initial ingestion and identical replay, while 2,000 had no consistent speed gain and the highest process peak. Replay performance varied by dataset and scenario, so this is a local recommendation only; no application default change is approved. Full measurements and method: [Stage 1H-E analysis](benchmarks.md#stage-1h-e-complete-three-repetition-matrix).
+## Stage 2A-2 DuckDB experiment dependency
+
+Use DuckDB only in a dedicated environment under `experiments/data_engineering/parquet_duckdb/`, pinned to the tested `duckdb==2.0.0` release. DuckDB's embedded SQL engine reads and writes Parquet directly, avoiding a PyArrow direct dependency for the planned lab. This is MIT-licensed, free local tooling compatible with Python 3.12 and Windows x86-64; the application dependency set and modular serving architecture stay unchanged. Initial smoke checks proved import, SQL, Parquet round trip and package consistency, but do not establish MovieLens performance or memory characteristics. Reassess version, license and platform prerequisites when rebuilding the lab environment.
+
+## Stage 2A-3 CSV-to-Parquet conversion
+
+Keep CSV as the immutable canonical source and write fully validated typed Parquet outputs only in temporary or explicitly ignored experiment storage. Use explicit types and multiset equality to preserve values and duplicate semantics. In the full conversion, Zstandard produced the smallest output (667,517 B, 4.462x vs. 2,978,154 CSV bytes), followed by Snappy (938,669 B) and uncompressed Parquet (1,472,136 B). This supports Zstandard when minimizing local storage is the priority, but no codec-speed, query-speed or memory comparison was made; no default/promotion decision follows from size alone.
+
+## Stage 2A-4 analytical workload semantics
+
+Keep analytics as an offline DuckDB experiment over CSV and Parquet; it does not alter the PostgreSQL serving path. Bind user filters, use deterministic tie-breaks, and define multi-genre counting as one movie/rating contribution per assigned genre, so category totals overlap. UTC is explicit for timestamp buckets. Cross-format correctness is established separately from plan shape. A pushed filter and available row-group statistics do not prove row-group pruning; the inspected full dataset had one row group per Parquet file, and query performance remains unmeasured.
+
+## Stage 2A-5 local format benchmark disposition
+
+Retain CSV as the canonical source and keep Parquet/DuckDB in the separate lab. In the measured MovieLens run Zstandard used the least space (667,517 B, 77.59% below CSV), while uncompressed Parquet had the fastest median for five of seven workloads; Snappy and Zstandard each led one. Full-row medians were close and workload ranges sometimes overlap. Select Zstandard for this experiment when storage is the priority, but do not choose a serving format or change application behavior from this single-machine test. Fresh child processes, five repeat observations, and rotated order improve consistency, but the shared OS cache is not cold and the dataset is small. The separate sorted-data plan showed 5/50 row groups scanned versus 50/50 for shuffled data with an identical result; row-group ordering/statistics are therefore part of the observed pruning behavior.
+
+## Stage 2A-6 experiment closeout
+
+Keep Stage 2A complete and isolated: it establishes file conversion, data parity, query-plan and local performance learning, not a reason to replace PostgreSQL or change the application. The corrected JSONL is the retained evidence; preliminary benchmark observations are not combined with it. The experiment environment remains pinned separately from core application dependencies. Stage 2B should begin with dbt plus the DuckDB adapter only after current compatibility and package constraints are verified and approval is given.
