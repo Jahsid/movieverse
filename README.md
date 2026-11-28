@@ -75,10 +75,18 @@ python -m pytest
 
 See [tests/README.md](tests/README.md) before running database-related checks. Most automated tests use isolated SQLite or mocks; they do not establish PostgreSQL migration compatibility. Root `test_*.py` smoke scripts may run work during pytest collection. Do not run the loader, manual database scripts, or [migrations](migrations/README.md) against a shared or production database as a test.
 
+## ETL benchmark evidence
+
+The offline sampler and timing tool is `python -m scripts.benchmark_etl`; it does not connect to a database. The PostgreSQL scenario runner is `python -m scripts.benchmark_scenarios` and refuses to run without the explicit opt-in and dedicated local test URL. It checks the database identity, requires an empty public schema, initializes with Alembic, holds an advisory lock, checks ingestion counts, and cleans its created schema. Use a hidden password prompt and never pass a database URL on the command line. See the [Stage 1H benchmark analysis](docs/benchmark_results/stage1h_analysis.md), [secure PowerShell runbook](docs/benchmark_results/stage1h_runbook.md), [sanitized raw measurements](docs/benchmark_results/stage1h_postgresql_matrix.jsonl), and separate [offline diagnostic results](docs/benchmarks.md#stage-1h-c3-offline-smoke-measurement).
+
+The recorded local matrix covered 2,439/5,000, 5,611/25,000, and 9,742/100,836 movie/rating rows with batch sizes 250, 1,000 and 2,000, three scenarios and three repetitions. Batch size 1,000 remains the default. These measurements describe one local Windows/PostgreSQL setup, not production capacity.
+
 ## Development records
 
 - [ROADMAP.md](ROADMAP.md): objectives, acceptance gates, tools, and learning goals for Stages 0A–10.
 - [docs/architecture/](docs/architecture/ARCHITECTURE_OVERVIEW.md): current architecture, data flow, file audit, debt, and structural proposals.
+- [Stage 1 learning checkpoint](docs/learning/stage1_checkpoint.md): ETL flow, migration/transaction behavior, debugging exercises, interview prompts and measured resume evidence.
+- [Stage 2 assessment](docs/stage2_advanced_data_engineering.md): proposed isolated Airflow, Kafka, PySpark, dbt, Parquet and DuckDB labs; approval required before implementation.
 - [docs/decisions.md](docs/decisions.md): architectural decisions and open decisions.
 - [docs/progress.md](docs/progress.md): implemented work and stage status.
 - [docs/benchmarks.md](docs/benchmarks.md): measurement method and verified results only.
