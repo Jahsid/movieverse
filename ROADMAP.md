@@ -49,12 +49,12 @@ This is the approved **sequence and learning scope**, not a claim that future fe
 
 - **Objective:** Make ingestion repeatable, explainable, and safe to rerun.
 - **Learn:** Data contracts, idempotency, lineage, transactional loads, and schema evolution.
-- **Features/work:** Dataset manifest, validation report, clear ingestion-job counts/status, versioned migration process, and recovery instructions.
+- **Features/work:** Dataset manifest, validation report, clear ingestion-job counts/status, versioned migration process, recovery instructions, and reproducible offline/guarded ETL benchmarks.
 - **Tools/frameworks:** pandas, SQLAlchemy, PostgreSQL, pytest; **free alternatives:** CSV and Python standard library for small checks; SQLite only for non-dialect unit tests.
 - **Dependencies:** Stage 0C schema knowledge and disposable DB. **Expected file changes:** `app/data_pipeline/*`, `app/services/ingestion_service.py`, `app/database/models.py` only if justified, `load_data.py`, `migrations/*`, `tests/test_ingestion.py`, docs.
-- **Acceptance criteria:** Repeated import does not duplicate core rows; invalid data is rejected with an actionable report; job counts and schema version are understandable.
-- **Testing:** Synthetic bad/duplicate CSVs, rollback cases, repeat load and migration upgrade on isolated PostgreSQL.
-- **Performance metrics:** Rows processed/sec, rejected rows, duplicate rows, peak RAM, and total ingestion time by dataset size.
+- **Acceptance criteria:** Repeated import does not duplicate core rows; invalid data is rejected with an actionable report; job counts and schema version are understandable; benchmark scenarios produce reproducible, count-checked results with safe local database lifecycle and cleanup.
+- **Testing:** Synthetic bad/duplicate CSVs, rollback cases, repeat load and migration upgrade on isolated PostgreSQL; deterministic offline samples and guarded benchmark matrix.
+- **Performance metrics:** Rows processed/sec, rejected rows, duplicate rows, peak RAM, and total ingestion time by dataset size and batch size. Stage 1H measured a single local PostgreSQL environment; see [benchmark analysis](docs/benchmark_results/stage1h_analysis.md).
 - **Roles:** Data Engineer, Forward Deployed Engineer.
 - **Resume target, unverified:** “Processed X MovieLens records at Y rows/sec by adding validated, idempotent PostgreSQL ingestion with Z rejected-record visibility.”
 
@@ -62,10 +62,10 @@ This is the approved **sequence and learning scope**, not a claim that future fe
 
 - **Objective:** Demonstrate orchestration, streaming, distributed processing, transformations, and columnar storage without burdening the core app.
 - **Learn:** Airflow DAGs, Kafka events/consumer offsets, PySpark partitions, dbt models/tests, and Parquet layout. Compare each with the simple batch pipeline.
-- **Features/work:** Small independent labs: schedule a sample ingestion DAG, publish/consume a bounded rating event stream, transform a sample with PySpark and dbt, write/query Parquet, and document when each tool is justified.
+- **Features/work:** A proposed sequence begins with typed Parquet and DuckDB analysis, then dbt SQL models/tests, a local Airflow DAG, a bounded Kafka event/replay lab, and a PySpark comparison. Keep each tool in an isolated experiment; full scope, current installation constraints, alternatives and approval gates are in [the Stage 2 assessment](docs/stage2_advanced_data_engineering.md).
 - **Tools/frameworks:** Apache Airflow, Kafka, PySpark, dbt, Parquet, optional DuckDB. **Free alternatives:** Windows Task Scheduler/cron concept, Python queue or file log, pandas, SQL views, CSV. Use Colab or limited containers only if local RAM permits.
 - **Dependencies:** Stage 1 contracts and stable sample data. **Expected file changes:** `experiments/data_engineering/` or `notebooks/`, optional `data/processed/` outputs ignored by Git, lab-specific dependency file, tests and docs; no serving path changes by default.
-- **Acceptance criteria:** Each lab is independently runnable, has a bounded dataset and cleanup instructions, compares behavior/resources with the simple pipeline, and does not require all five tools for API startup.
+- **Acceptance criteria:** Each approved lab is independently runnable, has a bounded dataset and cleanup instructions, compares behavior/resources with the simple pipeline, and does not require any of these tools for API startup. Approve each phase before implementation.
 - **Testing:** DAG parse/one-run test, event replay/idempotency test, pandas–Spark result comparison, dbt tests, Parquet read/write schema round trip.
 - **Performance metrics:** Setup time, throughput, end-to-end lag, data size, peak RAM, and Parquet size/query time versus CSV. Record hardware and sample size.
 - **Roles:** Data Engineer, Platform Engineer.
