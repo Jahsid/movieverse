@@ -56,7 +56,7 @@ Stage 1A added `app/data_pipeline/manifest.py`, a read-only CLI and helper that 
 
 Stage 1B added `app/data_pipeline/quality_report.py`, which extracts the same raw CSVs and summarizes per-row masks defined in `validator.py`. Fail-fast `validate_movies` and `validate_ratings` still raise on the first rule category in their original order; the report combines masks to count each rejected row once and separately counts overlapping reasons. It includes the Stage 1A dataset content fingerprint and has no database access. Missing required columns reject every row in that file; null movie genres are counted as missing values but are allowed by current ingestion rules. Stage 1C checks valid rating movie IDs against valid IDs present in `movies.csv`, reporting orphan rows and distinct missing IDs without changing ingestion.
 
-`movie_service` uses SQLAlchemy for count, pagination, title `ILIKE`, and detail lookup. `recommendation_service` maps KNN results to one movie query and preserves rank. `watchlist_service` implements CRUD and transaction handling. `analytics_service` performs SQL aggregates; genre counts read every movie genre string and split it in Python. `ingestion_service` batches PostgreSQL `ON CONFLICT DO NOTHING` inserts and records each ingestion job. These services have clear roles, although HTTP exceptions in `watchlist_service` couple it to FastAPI.
+`movie_service` uses SQLAlchemy for count, pagination, title `ILIKE`, and detail lookup. `recommendation_service` maps KNN results to one movie query and preserves rank. `watchlist_service` implements CRUD and transaction handling. `analytics_service` performs SQL aggregates; genre counts read every movie genre string and split it in Python. `ingestion_service` batches PostgreSQL inserts and conditional updates and records each ingestion job. These services have clear roles, although HTTP exceptions in `watchlist_service` couple it to FastAPI.
 
 ## Frontend and dependencies
 
@@ -65,3 +65,23 @@ Stage 1B added `app/data_pipeline/quality_report.py`, which extracts the same ra
 ## Deployment and dependency notes
 
 `requirements.txt` is unpinned. `plotly` and `python-multipart` have no direct import or form-route use in the inspected source; they warrant dependency review, not immediate removal. No hardcoded database credential was observed; `.env` contents were deliberately not read. `.gitignore` excludes local secrets and generated files. See [DATA_FLOW.md](DATA_FLOW.md) and [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) for detailed traces and evidence-qualified issues.
+
+### Ingestion job lifecycle
+
+After table initialization, the loader commits a processing job before reading either CSV. The ingestion service applies per-file validation and the quality report's orphan-reference check before inserting users, movies, or ratings. A single transaction commits those inserts and the completed status. On a handled failure, the service rolls back and marks the processing job failed in a fresh transaction. A process termination or unavailable database can leave a processing row for investigation.
+
+For completed jobs, `total_records` counts processed movie and rating rows, `imported_records` counts source rows actually inserted, and the result splits the remaining rows into updated and unchanged. The compatibility field `skipped_records` counts unchanged source rows. Derived users have separate result counters. Failed jobs record the source total if both files were extracted, otherwise zero. A failed job has zero committed dataset changes. Fail-fast ingestion does no row-by-row rejection, so `rejected_records` stays zero. Use the offline quality report for invalid-row counts. Existing historical job counts retain their original semantics.
+
+The database records creation time. The CLI reports elapsed seconds on success and logs job ID, phase, exception class and elapsed time on failure. Persistent completion time, elapsed time, and failure details require a Stage 1G schema decision.
+
+### Stage 1F update policies
+
+| Entity and key | Conflict policy |
+|---|---|
+| Movie, movie ID | Apply supplied title, genres and release year, including a change to a null year. |
+| Rating, user ID and movie ID | Apply supplied rating and timestamp. The CSV is authoritative for supplied keys, including corrections with an older timestamp. |
+| Derived user, user ID | Create missing IDs. Preserve existing usernames and creation times. |
+
+Absent keys survive ingestion. Source duplicates and orphan movie references still fail validation. Within each batch the first conditional UPSERT locks existing keys and returns inserted keys. A second UPSERT uses null-safe comparisons and returns only updated keys. The remaining keys are unchanged. Both statements share the existing data transaction.
+
+File loads return the manifest-compatible fingerprint of the bytes parsed. Callers may pass the previous result's `content_fingerprint` as `previous_fingerprint` to obtain `source_changed`. All loads reconcile against database state, including matching fingerprints. Prepared frames have no source-byte fingerprint. File extraction temporarily holds one CSV's raw bytes in memory alongside parsed data.

@@ -85,3 +85,7 @@ See [tests/README.md](tests/README.md) before running database-related checks. M
 - [AGENTS.md](AGENTS.md): persistent contribution and safety instructions.
 
 The project targets zero additional expenditure and a Windows Intel i3/8 GB development machine. Computationally intensive learning experiments may use free Google Colab resources when available; production behavior must remain independently maintainable.
+
+### Ingestion job results
+
+After table initialization, `python load_data.py` tracks extraction through commit. A successful run reports processed, inserted, updated, and unchanged movie and rating rows, separate derived-user counts, the manifest-compatible content fingerprint, and elapsed seconds. Failures exit with status 1. Use the job ID in the failure log to look up the attempt. See [ingestion job semantics](docs/architecture/ARCHITECTURE_OVERVIEW.md#ingestion-job-lifecycle).

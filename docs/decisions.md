@@ -50,3 +50,11 @@ This log records approved choices and unresolved questions. The [current-state a
 | Should ingestion or experiment scripts move? | Stable commands/import paths, contract tests, and a concrete maintenance benefit |
 | Which advanced learning tools should be promoted? | Stage-specific quality, latency, cost, resource, and operational comparison |
 | What metadata can support semantic search and RAG? | Source permission/license, data quality, usefulness, and storage requirements |
+
+## Stage 1E ingestion transactions
+
+Commit a processing job before extraction, then commit data and completion together. After rollback, update only a still-processing job so a lost commit acknowledgement cannot overwrite completed status. This uses the existing SQLAlchemy session, conflict handling and schema. A separate job store would add a consistency boundary and another operational dependency. Dedicated diagnostic columns are deferred to Stage 1G.
+
+## Stage 1F incremental ingestion
+
+Keep inserted counts compatible with Stage 1E and report updated and unchanged counts in the job result. Two bounded statements for conflicting movie and rating keys avoid PostgreSQL tuple-header heuristics and unlocked pre-read counts. The trade-off is an extra round trip for a batch with conflicts. Stage 1G owns durable fingerprint, update count and watermark schema decisions. Interview question: How can conditional UPSERT and RETURNING distinguish changes under concurrent loads?
