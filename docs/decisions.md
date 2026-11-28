@@ -58,3 +58,23 @@ Commit a processing job before extraction, then commit data and completion toget
 ## Stage 1F incremental ingestion
 
 Keep inserted counts compatible with Stage 1E and report updated and unchanged counts in the job result. Two bounded statements for conflicting movie and rating keys avoid PostgreSQL tuple-header heuristics and unlocked pre-read counts. The trade-off is an extra round trip for a batch with conflicts. Stage 1G owns durable fingerprint, update count and watermark schema decisions. Interview question: How can conditional UPSERT and RETURNING distinguish changes under concurrent loads?
+
+## Stage 1G-B migration foundation
+
+Use Alembic (MIT) as an optional, free local migration dependency. Reviewed Python revisions and a database revision ledger supply ordering that standalone repair SQL lacks. Keep declarative metadata independent of application engine initialization. Offline rendering selects the PostgreSQL dialect directly. Online verification reuses the dedicated integration guard and an explicitly supplied connection. The baseline contains frozen operations so later model edits cannot change historical DDL.
+
+## Stage 1G-C adoption checks
+
+Compare against a frozen public-schema contract using PostgreSQL catalogs. The older audit uses mutable ORM definitions and loads the application URL at import. PostgreSQL catalogs expose generator ownership, index definitions and constraint details without that initialization. A verified legacy fixture requires a separate explicit stamp tag. The application loader keeps its existing behavior.
+
+## Stage 1G-D ingestion metadata schema
+
+Revision `0002_ingestion_metadata` follows `0001_stage_1f`. It adds eight nullable job columns. Both the revision and ORM omit defaults so historical unknowns remain distinguishable from zero counts and known timings. Existing job fields retain their meanings. Capture the original Stage 1F ORM DDL in a test fixture so legacy adoption stays independent of the current ORM. The schema guard accepts the metadata shape only with the matching ledger entry; stamping still requires the frozen baseline.
+
+## Stage 1G-E ingestion metadata writes
+
+Store successful metadata in the dataset transaction. Sample elapsed milliseconds using the monotonic clock immediately before the terminal write; the returned elapsed seconds still include the successful commit. A separate post-commit metadata write could leave completed jobs without counts. Record only a fixed phase/code pair on failure, conditional on the job still being in processing.
+
+## Stage 1G-F loader gate
+
+Resolve the single head through the repository Alembic configuration and validate the ledger and frozen public-schema contract before opening input files. Checking the version string alone would miss drift. Keep provisioning and stamping outside the loader. Future schema revisions must supply their corresponding verification contract.

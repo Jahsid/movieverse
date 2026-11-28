@@ -86,3 +86,23 @@ On the isolated SQLite partial-rerun fixture, three CSV rows yielded one insert 
 ## Stage 1F incremental ingestion checks
 
 In the isolated CSV fixture, a corrected movie and rating plus a new movie produced one insert and two updates. Replaying the same bytes yielded three unchanged rows. After editing the stored rating, replaying the identical fingerprint repaired that one row. These measurements cover correctness on SQLite. PostgreSQL throughput, peak memory, and concurrent-load performance remain unmeasured.
+
+## Stage 1G-B migration tooling (Windows, Python 3.12.0)
+
+Alembic 1.20.1 and its Mako 1.4.3 dependency account for 3,099,080 bytes when summing installed files listed by their distributions. A fresh Python process running the offline baseline upgrade into StringIO peaked at 36,082,840 traced Python allocation bytes, measured with tracemalloc started before importing Alembic. This excludes untraced native allocations. SQLAlchemy 2.1.9 was already installed. Pip reported no broken requirements.
+
+## Stage 1G-C isolated correctness checks (2026-11-28)
+
+In the existing Windows Python 3.12 environment with PostgreSQL opt-in disabled, the migration and integration test modules passed 17 tests with 3 skipped in 1.30 seconds. The full isolated suite passed 123 tests with 3 skipped in 10.13 seconds. Both emitted the existing Starlette warning. These results measure isolated verification coverage; live migration evidence is pending.
+
+## Stage 1G-D isolated verification
+
+On Windows with PostgreSQL opt-in disabled, the focused migration and integration modules passed 19 tests with 3 skips in 2.31s. The complete suite passed 125 tests with 3 skips in 8.70s. Both runs emitted the existing Starlette warning. The isolated tests compare the offline metadata DDL to ORM columns and check drift and revision handling. PostgreSQL round-trip and historical-row verification for this revision await a live run.
+
+## Stage 1G-E isolated correctness checks
+
+The ingestion, migration and PostgreSQL modules passed 51 isolated cases with 3 guarded skips in 3.16s. The full suite passed 126 with 3 skips in 8.35s. Both runs used the existing Python 3.12 environment with live opt-in disabled and emitted the existing Starlette warning. This verifies job metadata behavior under SQLite and injected failures. Live evidence for Part E is pending.
+
+## Stage 1G-F isolated checks
+
+Focused loader, migration and integration modules: 27 passed, 3 guarded skips, 1 existing warning in 1.99s. Full isolated suite: 134 passed, 3 guarded skips, 1 existing warning in 11.07s with PostgreSQL opt-in disabled. Live no-write rejection checks are pending.

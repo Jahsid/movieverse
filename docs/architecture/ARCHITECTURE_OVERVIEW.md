@@ -34,7 +34,7 @@ Routes mostly delegate to services. The recommendation route directly checks mod
 
 ## Database architecture
 
-`app/database/connection.py` loads `.env`, requires `DATABASE_URL`, normalizes older PostgreSQL URL schemes to psycopg, creates an engine with `pool_pre_ping=True`, and provides `SessionLocal` and a `get_db` yield dependency that closes sessions. Importing it constructs the engine. `load_data.py` calls `Base.metadata.create_all`; there is no general migration framework. The sole SQL migration is the additive watchlist migration in `migrations/`, accompanied by a runbook and a read-only `scripts/schema_audit.py` utility. The migration's application to any database was not established by this audit.
+`app/database/connection.py` loads `.env`, requires `DATABASE_URL`, normalizes older PostgreSQL URL schemes to psycopg, creates an engine with `pool_pre_ping=True`, and provides `SessionLocal` and a `get_db` yield dependency that closes sessions. Importing it constructs the engine. The loader reads the local Alembic revision graph, checks the PostgreSQL ledger and compares the public schema before starting ingestion. The [migration runbook](../../migrations/README.md) covers initialization and adoption.
 
 | Table / model | Primary key and important columns | Relations and constraints |
 |---|---|---|
@@ -68,11 +68,11 @@ Stage 1B added `app/data_pipeline/quality_report.py`, which extracts the same ra
 
 ### Ingestion job lifecycle
 
-After table initialization, the loader commits a processing job before reading either CSV. The ingestion service applies per-file validation and the quality report's orphan-reference check before inserting users, movies, or ratings. A single transaction commits those inserts and the completed status. On a handled failure, the service rolls back and marks the processing job failed in a fresh transaction. A process termination or unavailable database can leave a processing row for investigation.
+After schema verification, the loader commits a processing job before reading either CSV. The ingestion service applies per-file validation and the quality report's orphan-reference check before inserting users, movies, or ratings. A single transaction commits those inserts and the completed status. On a handled failure, the service rolls back and marks the processing job failed in a fresh transaction. A process termination or unavailable database can leave a processing row for investigation.
 
-For completed jobs, `total_records` counts processed movie and rating rows, `imported_records` counts source rows actually inserted, and the result splits the remaining rows into updated and unchanged. The compatibility field `skipped_records` counts unchanged source rows. Derived users have separate result counters. Failed jobs record the source total if both files were extracted, otherwise zero. A failed job has zero committed dataset changes. Fail-fast ingestion does no row-by-row rejection, so `rejected_records` stays zero. Use the offline quality report for invalid-row counts. Existing historical job counts retain their original semantics.
+For completed jobs, `total_records` counts processed movie and rating rows, `imported_records` counts source rows actually inserted, and the job stores the remaining rows in `updated_records` and `unchanged_records`. The compatibility field `skipped_records` counts unchanged source rows. Derived users have separate result counters. Failed jobs record the source total if both files were extracted, otherwise zero. A failed job has zero committed dataset changes. Fail-fast ingestion does no row-by-row rejection, so `rejected_records` stays zero. Use the offline quality report for invalid-row counts. Existing historical job counts retain their original semantics.
 
-The database records creation time. The CLI reports elapsed seconds on success and logs job ID, phase, exception class and elapsed time on failure. Persistent completion time, elapsed time, and failure details require a Stage 1G schema decision.
+New jobs record a UTC start and terminal timestamp. Monotonic duration in milliseconds runs through preparation of the terminal write. The CLI continues to return elapsed seconds through successful commit. Both successful and failed file loads retain the manifest-compatible fingerprint once both files have been hashed. Prepared frames and incomplete reads leave it NULL. Failed jobs store a fixed phase and code, and zero committed source counts. The failure update only matches a processing job, so a lost acknowledgement cannot replace a committed success.
 
 ### Stage 1F update policies
 
@@ -85,3 +85,5 @@ The database records creation time. The CLI reports elapsed seconds on success a
 Absent keys survive ingestion. Source duplicates and orphan movie references still fail validation. Within each batch the first conditional UPSERT locks existing keys and returns inserted keys. A second UPSERT uses null-safe comparisons and returns only updated keys. The remaining keys are unchanged. Both statements share the existing data transaction.
 
 File loads return the manifest-compatible fingerprint of the bytes parsed. Callers may pass the previous result's `content_fingerprint` as `previous_fingerprint` to obtain `source_changed`. All loads reconcile against database state, including matching fingerprints. Prepared frames have no source-byte fingerprint. File extraction temporarily holds one CSV's raw bytes in memory alongside parsed data.
+
+The declarative base lives in `app/database/base.py`. Both the ORM models and application connection module share it. The [Alembic baseline](../../migrations/README.md) can render the Stage 1F schema without initializing the application engine.

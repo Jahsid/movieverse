@@ -7,7 +7,7 @@ Record completed work only after verifying it. This file tracks **status**, whil
 | 0A Repository audit | Completed | Six existing [architecture audit files](architecture/ARCHITECTURE_OVERVIEW.md); read-only source analysis. Their 2026-11-25 test result is historical. |
 | 0B Development foundation | Completed, 2026-11-27 | Committed at `9f58cde`; documentation only. |
 | 0C Baseline hardening | Assessment work through Part 2E completed, pending review, 2026-11-27 | Read-only schema audit, evaluator correction, response contract, test isolation, readiness policy, dependency snapshot, and isolated startup benchmark recorded. Isolated suite baseline: 77 passed, 1 warning; clean-environment recreation and disposable PostgreSQL write-path integration remain unverified. |
-| 1 Reliable Data Engineering | Parts 1A–1F complete, 2026-11-28 | Guarded local PostgreSQL integration and isolated ingestion regression verified. Migration testing remains future Stage 1 work. |
+| 1 Reliable Data Engineering | Parts 1A–1F complete, 2026-11-28 | Stage 1G verified through Part G on guarded local PostgreSQL and the isolated suite. Ready for Part H. |
 | 2 Advanced Data Engineering | Not started | Airflow, Kafka, PySpark, dbt and Parquet learning labs are planned. |
 | 3 ML Engineering and MLOps | Not started | Existing offline evaluation predates this stage; artifact lifecycle is absent. |
 | 4 Advanced recommendations | Not started | Offline hybrid/content code exists; proposed APIs are absent. |
@@ -200,3 +200,39 @@ Implemented job tracking from CSV extraction through commit, cross-file validati
 Implemented conditional movie and rating updates, insert-only derived users, per-run change counts and manifest-compatible file fingerprints. The focused ingestion, manifest and guard run passed 48 tests with one live skip before the final rollback case was added. Full regression including that case: 110 passed, 1 skipped, 1 existing warning in 40.93 seconds. The first full run had one Streamlit 20-second timeout (109 passed, 1 skipped). The unchanged suite passed on retry. The guarded PostgreSQL case now asserts changed values and idempotent replay. See the private invocation in [tests/README.md](../tests/README.md). Durable fingerprints, updated counts and watermarks are deferred to Stage 1G.
 
 **Closeout, 2026-11-28.** The user ran the guarded PostgreSQL integration module against `movieverse_itest` and reported **5 passed, 1 warning in 1.51s**. Four cases check rejection of unsafe targets. One connects to the disposable database and exercises schema and transaction behavior, ingestion counts, changed movie and rating values, and unchanged replay. Failure injection and source-file fingerprint checks are covered by the separate isolated regression baseline of **110 passed, 1 skipped, 1 existing warning**. Stages 1D, 1E and 1F are complete. Stage 1G has not started.
+
+## Stage 1G-B baseline tooling (2026-11-28)
+
+Alembic 1.20.1 generated upgrade and downgrade SQL offline with the existing Windows Python 3.12 environment. The baseline matches PostgreSQL-compiled ORM DDL for all five tables and three explicit indexes. The two focused modules passed 7 tests, skipped both opt-in PostgreSQL cases, and emitted the existing Starlette warning in 1.30 seconds. The previous full isolated result remains 110 passed and 1 skipped. Live migration verification and the ingestion metadata revision are pending. See [migration commands](../migrations/README.md). Interview prompt: Why can a schema match a baseline without proving which historical SQL scripts ran?
+
+## Stage 1G-C baseline verification and adoption rehearsal (2026-11-28)
+
+Implemented the frozen PostgreSQL catalog comparison and explicit stamp authorization for the dedicated test harness. Focused migration and guard modules passed 17 tests with 3 live skips. Full isolated pytest passed 123 tests with 3 live skips in 10.13 seconds. Both runs emitted the existing Starlette warning. Live verification of fresh and repeat upgrade, seeded legacy adoption, drift and history rejection, downgrade and rollback cleanup is pending the private [PostgreSQL rehearsal](../migrations/README.md#stage-1g-c-verification-and-adoption-rehearsal). No application database was inspected or stamped. Interview prompt: Why must adoption validate both the schema and revision ledger before recording a baseline?
+
+**Live run and cleanup fix.** The user reported 2 failed, 18 passed, 1 warning in 3.68s on the guarded local PostgreSQL run. Both migration cases reached the post-rollback assertion but SQLAlchemy rejected the query inside the closed transaction context. Each case now exits that context, opens a fresh connection, rechecks database identity and privileges, and asserts that public contains zero relations, including the Alembic ledger. After the fix, the two focused modules ran with PostgreSQL disabled and returned 17 passed, 3 skipped, 1 existing warning in 1.85s. Stage 1G-C live verification remains pending a successful rerun of all 20 cases.
+
+**Stages 1G-B and 1G-C verified.** The user reported 20 passed, 1 warning in 2.62s on guarded local PostgreSQL after the cleanup fix, including fresh migration, legacy adoption, drift rejection, downgrade and rollback cleanup. The previous complete isolated regression baseline was 123 passed, 3 skipped, 1 existing warning.
+
+## Stage 1G-D ingestion metadata migration
+
+Implemented `0001_stage_1f` → `0002_ingestion_metadata` and updated the job model. The [migration runbook](../migrations/README.md#stage-1g-d-ingestion-metadata) covers the offline SQL and private live commands. Isolated verification passed (19 focused tests and 125 full-suite tests, each with 3 live skips and the existing warning). Live verification of this revision is pending. The guarded tests check historical data through upgrade, repeat upgrade, downgrade and re-upgrade. Metadata persistence belongs to 1G-E and loader initialization changes to 1G-F. Interview prompt: Why does a nullable counter without a default preserve information about historical jobs?
+
+**Stage 1G-D complete.** The user reported 22 passed, 1 warning in 3.10s against guarded local PostgreSQL. The full isolated suite passed 125 tests with 3 skips and 1 existing warning.
+
+## Stage 1G-E persisted ingestion metadata
+
+Implemented writes for new jobs on revision `0002_ingestion_metadata`. Isolated tests cover initial, changed and replayed file loads, prepared frames, extraction and validation errors, dataset rollback and lost commit acknowledgement. Focused result: 51 passed, 3 skipped, 1 existing warning. Full result: 126 passed, 3 skipped, 1 existing warning. The [guarded PostgreSQL run](../migrations/README.md#stage-1g-c-verification-and-adoption-rehearsal) now checks stored success and failure metadata on the migrated schema. Live verification for E remains pending. Interview prompt: How can a client distinguish a rolled-back transaction from a committed transaction whose acknowledgement was lost?
+
+**Stage 1G-E verified.** The user ran the two guarded PostgreSQL modules against movieverse_itest: 22 passed, 1 existing Starlette warning in 3.25s. The previous full isolated suite passed 126 tests with 3 skips and the same warning.
+
+## Stage 1G-F loader revision safeguards
+
+The loader verifies the configured migration head and schema before creating an ingestion job. The isolated tests cover current, outdated, missing, unknown, malformed, multiple and drifted ledger/schema states. Focused pytest passed 27 tests with 3 guarded skips. Full pytest passed 134 tests with 3 guarded skips and the existing warning in 11.07s. The guarded cases compare all five application tables before and after rejection and exercise ingestion at head.  Interview prompt: Why can a ledger at head still be incompatible with the loader?
+
+**Stage 1G-F verified.** The user ran the loader revision, migration baseline and PostgreSQL integration modules with local integration enabled: **30 passed, 1 warning in 3.66s**. Three cases used PostgreSQL (fresh migration, legacy adoption, schema and transactions). The other 27 ran without it. The warning is the existing Starlette TestClient/httpx deprecation.
+
+## Stage 1G-G final migration verification
+
+Reviewed the assertions in the passing Part F run and the full isolated baseline (134 passed, 3 skipped, 1 existing warning in 11.07s). The fresh fixture reached head through the baseline. The frozen legacy fixture retained rows across explicit adoption, rejected drift before stamping, and preserved historical job values and NULL metadata through downgrade and re-upgrade. Both fixtures verified head replay, incompatible-ledger rejection before ingestion writes and cleanup from a separately verified connection.
+
+Live checks cover stored fingerprints, source counts, timestamps, duration and allowlisted failure metadata. Isolated failure injection verifies rollback after partial writes and protection of a completed job after lost commit acknowledgement. The 63 pinned distributions matched the existing Windows Python 3.12.0 environment and pip check passed. A clean-environment rebuild and backup restore remain untested. Metadata-column downgrade discards values in those columns. The evidence is sufficient to proceed to 1G-H. No test rerun or migration was needed for this review.
