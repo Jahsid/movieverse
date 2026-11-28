@@ -1,6 +1,8 @@
 # Virtual environment
 .venv/
 .venv-watchlist/
+experiments/data_engineering/parquet_duckdb/.venv/
+experiments/data_engineering/parquet_duckdb/output/
 
 # Python cache
 __pycache__/
